@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildGeminiRequest, geminiModelChain, geminiModelName, rowsFromGemini, shouldTryNextModel } from "./gemini-ocr";
+import { buildGeminiRequest, geminiModelChain, geminiModelName, rowsFromGemini, shouldTryNextModel, thinkingLevelFor } from "./gemini-ocr";
 
 test("reads structured rows from an Interactions response", () => {
   const result = rowsFromGemini({
@@ -103,17 +103,19 @@ test("surfaces a Gemini error and a blocked photo", () => {
   assert.match(blocked.error ?? "", /blocked/i);
 });
 
-test("asks Gemini 3.8 Flash for a low thinking level", () => {
+test("starts on Flash-Lite and keeps Gemini 3.8 off minimal thinking", () => {
   const request = buildGeminiRequest("abc", "image/jpeg");
-  assert.equal(request.model, "gemini-3.8-flash");
-  assert.equal(request.generation_config.thinking_level, "low");
+  assert.equal(request.model, "gemini-3.5-flash-lite");
+  assert.equal("thinking_level" in request.generation_config ? request.generation_config.thinking_level : undefined, "minimal");
+  assert.equal(request.generation_config.max_output_tokens, 3072);
+  assert.equal(thinkingLevelFor("gemini-3.8-flash"), "low");
 });
 
 test("falls through to another Flash model when one is at capacity", () => {
-  assert.deepEqual(geminiModelChain("gemini-3.8-flash").slice(0, 3), [
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
+  assert.deepEqual(geminiModelChain(undefined).slice(0, 3), [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
   ]);
   assert.equal(geminiModelChain("gemini-3.7-flash").filter((model) => model === "gemini-3.7-flash").length, 1);
   assert.equal(
@@ -124,7 +126,7 @@ test("falls through to another Flash model when one is at capacity", () => {
 });
 
 test("rejects a model name that is not a single token", () => {
-  assert.equal(geminiModelName("models/gemini-3.8-flash"), "gemini-3.8-flash");
-  assert.equal(geminiModelName("gemini/../other"), "gemini-3.8-flash");
-  assert.equal(geminiModelName(undefined), "gemini-3.8-flash");
+  assert.equal(geminiModelName("models/gemini-3.5-flash-lite"), "gemini-3.5-flash-lite");
+  assert.equal(geminiModelName("gemini/../other"), "gemini-3.5-flash-lite");
+  assert.equal(geminiModelName(undefined), "gemini-3.5-flash-lite");
 });

@@ -1,4 +1,4 @@
-const MAX_EDGE = 1800;
+const MAX_EDGE = 1280;
 const MAX_BYTES = 12 * 1024 * 1024;
 
 export async function fileToJpegBase64(file: File): Promise<{ base64: string; previewUrl: string }> {
@@ -30,7 +30,7 @@ export async function fileToJpegBase64(file: File): Promise<{ base64: string; pr
   context.drawImage(bitmap, 0, 0, width, height);
   bitmap.close?.();
 
-  const previewUrl = canvas.toDataURL("image/jpeg", 0.86);
+  const previewUrl = canvas.toDataURL("image/jpeg", 0.72);
   const base64 = previewUrl.split(",")[1] ?? "";
   if (!base64) throw new Error("Couldn't prepare the photo.");
   return { base64, previewUrl };

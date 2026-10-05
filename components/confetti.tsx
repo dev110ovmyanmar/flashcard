@@ -4,7 +4,7 @@ import { useReducedMotion } from "framer-motion";
 import { motion } from "framer-motion";
 import { useMemo } from "react";
 
-const COLORS = ["#1a1a18", "#5c5c57", "#d8d6d0", "#f4f4f1", "#8a887f", "#2e2e2b"];
+const COLORS = ["#c4512c", "#2f6f5e", "#e2b657", "#f7f1e6", "#243028", "#e38b63"];
 
 type Piece = {
   id: number;

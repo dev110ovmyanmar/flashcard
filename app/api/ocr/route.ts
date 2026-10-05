@@ -94,7 +94,7 @@ export async function POST(request: Request) {
           "x-goog-api-key": key,
         },
         body: JSON.stringify(buildGeminiRequest(imageBase64, mimeType, model)),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(18_000),
       });
 
       const payload: unknown = await response.json().catch(() => null);

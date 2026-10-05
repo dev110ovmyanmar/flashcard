@@ -1,31 +1,22 @@
 import { parseVocabLine, parseVocabLines } from "@/lib/parse-vocab";
 import type { ParsedRow } from "@/lib/types";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 
-/** Tried in order when the first model is busy, missing, or closed to this key. */
+/** Fast models first. Slower Flash models are only used when an earlier one is busy or missing. */
 export const GEMINI_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.7-flash",
-  "gemini-3.6-flash",
-  "gemini-3.5-flash",
   "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.8-flash",
 ] as const;
 
-const PROMPT = `You are reading a photographed Japanese vocabulary textbook page.
-The page lists headwords (kanji, sometimes with okurigana, or kana-only words), a hiragana or katakana reading, and a Myanmar (Burmese) meaning.
-
-Extract every vocabulary row in reading order, top to bottom. Skip titles, page numbers, lesson numbers, and column headers such as 単語, 読み, or 意味.
-
-Return JSON with this shape:
-{"rows":[{"kanji":"","reading":"","meaning":""}]}
-
-Rules:
-- kanji is the headword exactly as printed, including okurigana. Example: 申し込む.
-- reading is only the pronunciation in hiragana or katakana. Do not repeat the kanji inside the reading.
-- meaning is the Myanmar translation in Myanmar script. Do not translate it into English.
-- If one field on a real row is unreadable, use an empty string for that field.
-- Do not invent words that are not printed on the page.`;
+const PROMPT = `Read this Japanese vocabulary page from top to bottom.
+Each row is a headword (keep okurigana, for example 申し込む), a hiragana or katakana reading, and a Myanmar meaning.
+Skip titles, numbers, and headers.
+Return {"rows":[{"kanji":"","reading":"","meaning":""}]}.
+Do not translate into English or invent words. Use an empty string for an unreadable field.`;
 
 export function geminiModelName(value: string | undefined): string {
   const trimmed = value?.trim().replace(/^models\//, "");
@@ -73,6 +64,17 @@ const RESPONSE_SCHEMA = {
   required: ["rows"],
 };
 
+export function thinkingLevelFor(model: string): "minimal" | "low" | undefined {
+  if (/^gemini-3\.[87]/.test(model)) return "low";
+  if (model.startsWith("gemini-3")) return "minimal";
+  return undefined;
+}
+
+function generationThinking(model: string): { thinking_level: "minimal" | "low" } | Record<string, never> {
+  const level = thinkingLevelFor(model);
+  return level ? { thinking_level: level } : {};
+}
+
 export function buildGeminiRequest(imageBase64: string, mimeType: string, model = DEFAULT_GEMINI_MODEL) {
   return {
     model,
@@ -87,8 +89,8 @@ export function buildGeminiRequest(imageBase64: string, mimeType: string, model 
       schema: RESPONSE_SCHEMA,
     },
     generation_config: {
-      max_output_tokens: 8192,
-      ...(model.startsWith("gemini-3") ? { thinking_level: "low" } : {}),
+      max_output_tokens: 3072,
+      ...generationThinking(model),
     },
   };
 }
