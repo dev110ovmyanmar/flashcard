@@ -3,6 +3,15 @@ import type { ParsedRow } from "@/lib/types";
 
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
+/** Tried in order when the first model is busy, missing, or closed to this key. */
+export const GEMINI_FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+] as const;
+
 const PROMPT = `You are reading a photographed Japanese vocabulary textbook page.
 The page lists headwords (kanji, sometimes with okurigana, or kana-only words), a hiragana or katakana reading, and a Myanmar (Burmese) meaning.
 
@@ -22,6 +31,27 @@ export function geminiModelName(value: string | undefined): string {
   const trimmed = value?.trim().replace(/^models\//, "");
   if (trimmed && /^[A-Za-z0-9._-]{1,80}$/.test(trimmed)) return trimmed;
   return DEFAULT_GEMINI_MODEL;
+}
+
+export function geminiModelChain(preferred: string | undefined): string[] {
+  const primary = geminiModelName(preferred);
+  return [primary, ...GEMINI_FALLBACK_MODELS.filter((model) => model !== primary)];
+}
+
+export function geminiErrorMessage(payload: unknown, status: number): string {
+  if (isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string") {
+    return payload.error.message;
+  }
+  return `Gemini returned ${status}.`;
+}
+
+export function shouldTryNextModel(status: number, message: string): boolean {
+  if (status === 404 || status === 408 || status === 429 || status === 500 || status === 503 || status === 504) {
+    return true;
+  }
+  return /high demand|try again later|overloaded|unavailable|resource exhausted|currently experiencing|no longer available|not found|does not exist/i.test(
+    message,
+  );
 }
 
 const RESPONSE_SCHEMA = {

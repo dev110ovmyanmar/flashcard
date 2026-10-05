@@ -30,7 +30,7 @@ Scans send the photo to the [Gemini API](https://ai.google.dev/gemini-api/docs).
 GEMINI_API_KEY=your-key
 ```
 
-`GOOGLE_GENERATIVE_AI_API_KEY` is accepted as an alias. Scans use the [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview) with `gemini-3.8-flash`. Set `GEMINI_MODEL` to choose another model. Restart the dev server after adding the key.
+`GOOGLE_GENERATIVE_AI_API_KEY` is accepted as an alias. Scans use the [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview), starting with `gemini-3.8-flash` and moving to another Flash model when that one is busy. Set `GEMINI_MODEL` to choose which model is tried first. Restart the dev server after adding the key.
 
 ## Study
 

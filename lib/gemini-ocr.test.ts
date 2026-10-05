@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildGeminiRequest, geminiModelName, rowsFromGemini } from "./gemini-ocr";
+import { buildGeminiRequest, geminiModelChain, geminiModelName, rowsFromGemini, shouldTryNextModel } from "./gemini-ocr";
 
 test("reads structured rows from an Interactions response", () => {
   const result = rowsFromGemini({
@@ -107,6 +107,20 @@ test("asks Gemini 3.8 Flash for a low thinking level", () => {
   const request = buildGeminiRequest("abc", "image/jpeg");
   assert.equal(request.model, "gemini-3.8-flash");
   assert.equal(request.generation_config.thinking_level, "low");
+});
+
+test("falls through to another Flash model when one is at capacity", () => {
+  assert.deepEqual(geminiModelChain("gemini-3.8-flash").slice(0, 3), [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+  ]);
+  assert.equal(geminiModelChain("gemini-3.7-flash").filter((model) => model === "gemini-3.7-flash").length, 1);
+  assert.equal(
+    shouldTryNextModel(503, "gemini-3.8-flash is currently experiencing high demand, spikes in demand are usually temporary. Please try again later."),
+    true,
+  );
+  assert.equal(shouldTryNextModel(400, "API key not valid."), false);
 });
 
 test("rejects a model name that is not a single token", () => {
