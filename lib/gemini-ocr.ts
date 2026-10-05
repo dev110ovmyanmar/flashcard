@@ -58,7 +58,7 @@ export function buildGeminiRequest(imageBase64: string, mimeType: string, model 
     },
     generation_config: {
       max_output_tokens: 8192,
-      ...(model.startsWith("gemini-3") ? { thinking_level: "minimal" } : {}),
+      ...(model.startsWith("gemini-3") ? { thinking_level: "low" } : {}),
     },
   };
 }

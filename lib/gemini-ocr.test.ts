@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { geminiModelName, rowsFromGemini } from "./gemini-ocr";
+import { buildGeminiRequest, geminiModelName, rowsFromGemini } from "./gemini-ocr";
 
 test("reads structured rows from an Interactions response", () => {
   const result = rowsFromGemini({
@@ -101,6 +101,12 @@ test("surfaces a Gemini error and a blocked photo", () => {
     candidates: [],
   });
   assert.match(blocked.error ?? "", /blocked/i);
+});
+
+test("asks Gemini 3.8 Flash for a low thinking level", () => {
+  const request = buildGeminiRequest("abc", "image/jpeg");
+  assert.equal(request.model, "gemini-3.8-flash");
+  assert.equal(request.generation_config.thinking_level, "low");
 });
 
 test("rejects a model name that is not a single token", () => {
