@@ -46,7 +46,7 @@ export function FlashCard({
         transition={reduce ? { duration: 0.01 } : { type: "spring", stiffness: 170, damping: 22, mass: 0.85 }}
         style={{ transformStyle: "preserve-3d" }}
       >
-        <div className="flip-face flip-face-front card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)]" aria-hidden={flipped}>
+        <div className={`flip-face flip-face-front card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)] ${flipped ? "pointer-events-none" : ""}`} aria-hidden={flipped}>
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-primary/80" />
           <div className="flex h-full w-full flex-col items-center justify-between px-6 py-8 sm:px-10">
             <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{deckName}</p>
@@ -57,7 +57,7 @@ export function FlashCard({
           </div>
         </div>
 
-        <div className="flip-face flip-face-back card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)]" aria-hidden={!flipped}>
+        <div className={`flip-face flip-face-back card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)] ${flipped ? "" : "pointer-events-none"}`} aria-hidden={!flipped}>
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-moss/80" />
           <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 py-8 text-center sm:px-10">
             <p lang="ja" className="font-serif text-lg text-muted-foreground">

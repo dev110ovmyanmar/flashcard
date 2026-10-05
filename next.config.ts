@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The dev server is opened at 127.0.0.1. Without this, Next blocks
+  // dev resources and the page never hydrates.
+  allowedDevOrigins: ["127.0.0.1"],
 };
 
 export default nextConfig;
