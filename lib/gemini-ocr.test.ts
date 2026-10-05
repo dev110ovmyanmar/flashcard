@@ -2,6 +2,35 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { geminiModelName, rowsFromGemini } from "./gemini-ocr";
 
+test("reads structured rows from an Interactions response", () => {
+  const result = rowsFromGemini({
+    status: "completed",
+    steps: [
+      {
+        type: "model_output",
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              rows: [
+                { kanji: "経験", reading: "けいけん", meaning: "အတွေ့အကြုံ" },
+                { word: "申し込む", yomi: "もうしこむ", myanmar: "လျှောက်ထားသည်" },
+              ],
+            }),
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.rows[0]?.kanji, "経験");
+  assert.equal(result.rows[0]?.reading, "けいけん");
+  assert.equal(result.rows[1]?.kanji, "申し込む");
+  assert.equal(result.rows[1]?.reading, "もうしこむ");
+  assert.equal(result.rows[1]?.meaning, "လျှောက်ထားသည်");
+});
+
 test("reads structured rows from a Gemini candidate", () => {
   const result = rowsFromGemini({
     candidates: [
@@ -75,7 +104,7 @@ test("surfaces a Gemini error and a blocked photo", () => {
 });
 
 test("rejects a model name that is not a single token", () => {
-  assert.equal(geminiModelName("gemini-2.5-flash"), "gemini-2.5-flash");
-  assert.equal(geminiModelName("gemini/../other"), "gemini-2.5-flash");
-  assert.equal(geminiModelName(undefined), "gemini-2.5-flash");
+  assert.equal(geminiModelName("models/gemini-3.8-flash"), "gemini-3.8-flash");
+  assert.equal(geminiModelName("gemini/../other"), "gemini-3.8-flash");
+  assert.equal(geminiModelName(undefined), "gemini-3.8-flash");
 });

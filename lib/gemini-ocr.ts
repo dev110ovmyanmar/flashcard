@@ -1,7 +1,7 @@
 import { parseVocabLine, parseVocabLines } from "@/lib/parse-vocab";
 import type { ParsedRow } from "@/lib/types";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 const PROMPT = `You are reading a photographed Japanese vocabulary textbook page.
 The page lists headwords (kanji, sometimes with okurigana, or kana-only words), a hiragana or katakana reading, and a Myanmar (Burmese) meaning.
@@ -19,45 +19,46 @@ Rules:
 - Do not invent words that are not printed on the page.`;
 
 export function geminiModelName(value: string | undefined): string {
-  const trimmed = value?.trim();
+  const trimmed = value?.trim().replace(/^models\//, "");
   if (trimmed && /^[A-Za-z0-9._-]{1,80}$/.test(trimmed)) return trimmed;
   return DEFAULT_GEMINI_MODEL;
 }
 
-export function buildGeminiRequest(imageBase64: string, mimeType: string, model = DEFAULT_GEMINI_MODEL) {
-  return {
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { text: PROMPT },
-          { inline_data: { mime_type: mimeType, data: imageBase64 } },
-        ],
-      },
-    ],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 8192,
-      responseMimeType: "application/json",
-      responseSchema: {
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    rows: {
+      type: "array",
+      items: {
         type: "object",
         properties: {
-          rows: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                kanji: { type: "string" },
-                reading: { type: "string" },
-                meaning: { type: "string" },
-              },
-              required: ["kanji", "reading", "meaning"],
-            },
-          },
+          kanji: { type: "string" },
+          reading: { type: "string" },
+          meaning: { type: "string" },
         },
-        required: ["rows"],
+        required: ["kanji", "reading", "meaning"],
       },
-      ...(model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    },
+  },
+  required: ["rows"],
+};
+
+export function buildGeminiRequest(imageBase64: string, mimeType: string, model = DEFAULT_GEMINI_MODEL) {
+  return {
+    model,
+    store: false,
+    input: [
+      { type: "text", text: PROMPT },
+      { type: "image", data: imageBase64, mime_type: mimeType },
+    ],
+    response_format: {
+      type: "text",
+      mime_type: "application/json",
+      schema: RESPONSE_SCHEMA,
+    },
+    generation_config: {
+      max_output_tokens: 8192,
+      ...(model.startsWith("gemini-3") ? { thinking_level: "minimal" } : {}),
     },
   };
 }
@@ -83,12 +84,37 @@ export function rowsFromGemini(payload: unknown): { rows: ParsedRow[]; rawText: 
 }
 
 function extractText(payload: Record<string, unknown>): string {
+  if (typeof payload.output_text === "string" && payload.output_text.trim()) return payload.output_text.trim();
+
+  const fromSteps = textFromSteps(payload.steps);
+  if (fromSteps) return fromSteps;
+
   const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
   const chunks: string[] = [];
   for (const candidate of candidates) {
     if (!isRecord(candidate) || !isRecord(candidate.content) || !Array.isArray(candidate.content.parts)) continue;
     for (const part of candidate.content.parts) {
       if (isRecord(part) && typeof part.text === "string" && part.text.trim()) chunks.push(part.text);
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+function textFromSteps(steps: unknown): string {
+  if (!Array.isArray(steps)) return "";
+  const chunks: string[] = [];
+  for (const step of steps) {
+    if (!isRecord(step) || (step.type && step.type !== "model_output")) continue;
+    const content = step.content;
+    if (typeof content === "string" && content.trim()) {
+      chunks.push(content.trim());
+      continue;
+    }
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (isRecord(part) && (part.type === undefined || part.type === "text") && typeof part.text === "string" && part.text.trim()) {
+        chunks.push(part.text.trim());
+      }
     }
   }
   return chunks.join("\n").trim();
