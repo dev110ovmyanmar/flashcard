@@ -45,22 +45,22 @@ export function DeckLibrary({
   const hasSample = decks.some((deck) => deck.id === SAMPLE_DECK_ID);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
-      <section className="grid items-stretch gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+    <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-12">
+      <section className="grid items-stretch gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:gap-6">
         <div className="flex flex-col justify-center">
           <p className="text-[11px] tracking-[0.18em] text-primary uppercase">Vocabulary desk</p>
-          <h1 className="mt-3 max-w-xl text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl">
+          <h1 className="mt-2 max-w-xl text-[2rem] leading-[1.08] font-semibold tracking-tight sm:mt-3 sm:text-5xl sm:leading-[1.05]">
             A textbook page, turned into cards you can flip.
           </h1>
-          <p className="mt-4 max-w-xl text-base leading-7 text-muted-foreground">
+          <p className="mt-3 max-w-xl text-[15px] leading-6 text-muted-foreground sm:mt-4 sm:text-base sm:leading-7">
             Photograph a Japanese list — kanji, hiragana, and the Myanmar meaning. Check the reading, then study with the card face-down until the word stays.
           </p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Button type="button" className="h-11 rounded-full px-5" onClick={onScan}>
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:flex sm:flex-wrap sm:gap-3">
+            <Button type="button" className="h-12 rounded-full px-4 sm:h-11 sm:px-5" onClick={onScan}>
               <ImagePlus />
               Scan a page
             </Button>
-            <Button type="button" variant="outline" className="h-11 rounded-full bg-card/70 px-5" onClick={onType}>
+            <Button type="button" variant="outline" className="h-12 rounded-full bg-card/70 px-4 sm:h-11 sm:px-5" onClick={onType}>
               <Plus />
               Type a deck
             </Button>
@@ -88,7 +88,7 @@ export function DeckLibrary({
             const file = event.dataTransfer.files?.[0];
             if (file) onFile(file);
           }}
-          className={`glass cursor-pointer rounded-[1.75rem] p-5 text-left transition-colors ${dragging ? "border-primary" : ""}`}
+          className={`glass hidden cursor-pointer rounded-[1.75rem] p-5 text-left transition-colors lg:block ${dragging ? "border-primary" : ""}`}
         >
           <div className="rounded-2xl border border-border/80 bg-paper px-4 py-4">
             <div className="grid grid-cols-[1.1fr_1fr_1.2fr] gap-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
@@ -107,9 +107,21 @@ export function DeckLibrary({
             Rows like these become cards. The front shows only the kanji.
           </p>
         </button>
+
+        <button
+          type="button"
+          onClick={onScan}
+          className="card-wash rounded-[1.75rem] border border-border px-4 py-7 text-center shadow-[0_18px_40px_-24px_color-mix(in_oklab,var(--foreground)_35%,transparent)] lg:hidden"
+        >
+          <p className="text-[10px] tracking-[0.16em] text-muted-foreground uppercase">Front of the card</p>
+          <p lang="ja" className="mt-2 font-serif text-6xl leading-none tracking-tight">
+            経験
+          </p>
+          <p className="mt-3 text-sm text-muted-foreground">Photograph a page like this</p>
+        </button>
       </section>
 
-      <section className="mt-12">
+      <section className="mt-8 lg:mt-12">
         <div className="flex items-end justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold tracking-tight">On your desk</h2>
@@ -142,7 +154,7 @@ export function DeckLibrary({
                   transition={{ delay: Math.min(index, 8) * 0.04, type: "spring", stiffness: 260, damping: 26 }}
                   className="glass flex flex-col rounded-[1.5rem] p-4"
                 >
-                  <div className="flex items-start gap-3">
+                  <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => onStudy(deck.id)}>
                     <span lang="ja" className="grid size-14 shrink-0 place-items-center rounded-2xl bg-paper font-serif text-2xl">
                       {Array.from(lead).slice(0, 2).join("")}
                     </span>
@@ -156,7 +168,7 @@ export function DeckLibrary({
                         {stats.weak > 0 ? ` · ${stats.weak} to review` : ""}
                       </p>
                     </div>
-                  </div>
+                  </button>
                   <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
                       className="h-full rounded-full bg-moss"
@@ -164,15 +176,15 @@ export function DeckLibrary({
                     />
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">{formatUpdated(deck.updatedAt)}</p>
-                    <div className="flex items-center gap-1">
+                    <p className="min-w-0 truncate text-xs text-muted-foreground">{formatUpdated(deck.updatedAt)}</p>
+                    <div className="flex shrink-0 items-center gap-1">
                       <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${deck.name}`} onClick={() => onEdit(deck)}>
                         <Pencil />
                       </Button>
                       <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${deck.name}`} onClick={() => setPendingDelete(deck)}>
                         <Trash2 />
                       </Button>
-                      <Button type="button" size="sm" className="rounded-full" onClick={() => onStudy(deck.id)}>
+                      <Button type="button" size="sm" className="h-10 rounded-full px-4 sm:h-8" onClick={() => onStudy(deck.id)}>
                         Study
                       </Button>
                     </div>

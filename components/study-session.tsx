@@ -150,7 +150,7 @@ export function StudySession({
   const struggled = Object.keys(session.repeats).length;
 
   return (
-    <div ref={stageRef} tabIndex={-1} className="mx-auto flex w-full max-w-xl flex-col px-4 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] outline-none sm:px-0">
+    <div ref={stageRef} tabIndex={-1} className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] outline-none sm:px-0 sm:pt-5">
       <Confetti show={session.phase === "done"} />
       <div className="grid grid-cols-2 rounded-full border border-border bg-card/80 p-1">
         <button
@@ -199,13 +199,13 @@ export function StudySession({
         <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className="mt-5 flex min-h-[min(68dvh,520px)] flex-1 items-center">
+      <div className="mt-4 flex min-h-0 flex-1 items-stretch sm:mt-5 sm:min-h-[min(68dvh,520px)] sm:items-center">
         <AnimatePresence mode="wait" custom={direction}>
           {session.phase === "study" && current ? (
             <motion.div
               key={`${current.id}-${tick}`}
               custom={direction}
-              className="h-[min(62dvh,500px)] w-full"
+              className="h-[min(48dvh,500px)] w-full sm:h-[min(62dvh,500px)]"
               variants={{
                 initial: { opacity: 0, y: 22, scale: 0.985 },
                 animate: { opacity: 1, y: 0, scale: 1 },
@@ -262,20 +262,21 @@ export function StudySession({
         </AnimatePresence>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-3">
         <Button
           type="button"
           variant="outline"
-          className="h-12 rounded-full bg-card/80"
+          className="h-14 rounded-full bg-card/80 text-[15px] sm:h-12 sm:text-sm"
           disabled={session.phase !== "study"}
           onClick={() => revealOr("hard")}
         >
           <RotateCcw />
-          Review again
+          <span className="sm:hidden">Again</span>
+          <span className="hidden sm:inline">Review again</span>
         </Button>
         <Button
           type="button"
-          className="h-12 rounded-full"
+          className="h-14 rounded-full text-[15px] sm:h-12 sm:text-sm"
           disabled={session.phase !== "study"}
           onClick={() => revealOr("easy")}
         >
@@ -283,7 +284,10 @@ export function StudySession({
           Got it
         </Button>
       </div>
-      <p className="mt-3 text-center text-xs text-muted-foreground">
+      <p className="mt-3 text-center text-xs text-muted-foreground sm:hidden">
+        {flipped ? "Tap the card to hide the answer." : "Tap the card to see the reading."}
+      </p>
+      <p className="mt-3 hidden text-center text-xs text-muted-foreground sm:block">
         {flipped ? "← review again · → got it" : "The first tap shows the answer. Space flips the card."}
       </p>
       <p className="sr-only" aria-live="polite">

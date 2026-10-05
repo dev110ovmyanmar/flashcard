@@ -12,8 +12,8 @@ export function SiteHeader({
   onBack?: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-border/80 bg-background/75 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+    <header className="sticky top-0 z-30 border-b border-border/80 bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+      <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:h-16 sm:px-6">
         {onBack ? (
           <div className="flex min-w-0 items-center gap-2">
             <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={onBack}>

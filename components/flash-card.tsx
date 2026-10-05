@@ -5,10 +5,10 @@ import type { Card } from "@/lib/types";
 
 function kanjiClass(text: string): string {
   const length = Array.from(text).length;
-  if (length <= 2) return "text-7xl sm:text-8xl";
-  if (length <= 4) return "text-6xl sm:text-7xl";
-  if (length <= 6) return "text-5xl sm:text-6xl";
-  return "text-4xl sm:text-5xl";
+  if (length <= 2) return "text-6xl sm:text-8xl";
+  if (length <= 4) return "text-5xl sm:text-7xl";
+  if (length <= 6) return "text-4xl sm:text-6xl";
+  return "text-3xl sm:text-5xl";
 }
 
 export function FlashCard({
@@ -48,7 +48,7 @@ export function FlashCard({
       >
         <div className={`flip-face flip-face-front card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)] ${flipped ? "pointer-events-none" : ""}`} aria-hidden={flipped}>
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-primary/80" />
-          <div className="flex h-full w-full flex-col items-center justify-between px-6 py-8 sm:px-10">
+          <div className="flex h-full w-full flex-col items-center justify-between px-5 py-6 sm:px-10 sm:py-8">
             <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{deckName}</p>
             <p lang="ja" className={`font-serif leading-none tracking-tight text-foreground ${kanjiClass(card.kanji)}`}>
               {card.kanji}
@@ -59,19 +59,19 @@ export function FlashCard({
 
         <div className={`flip-face flip-face-back card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)] ${flipped ? "" : "pointer-events-none"}`} aria-hidden={!flipped}>
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-moss/80" />
-          <div className="flex h-full w-full flex-col items-center justify-center gap-6 px-6 py-8 text-center sm:px-10">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-5 py-6 text-center sm:gap-6 sm:px-10 sm:py-8">
             <p lang="ja" className="font-serif text-lg text-muted-foreground">
               {card.kanji}
             </p>
             <div>
               <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Reading</p>
-              <p lang="ja" className="mt-2 font-serif text-4xl leading-tight sm:text-5xl">
+              <p lang="ja" className="mt-2 font-serif text-3xl leading-tight sm:text-5xl">
                 {card.reading || "—"}
               </p>
             </div>
             <div className="w-full max-w-sm">
               <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Myanmar</p>
-              <p lang="my" className="mt-2 font-myanmar text-2xl leading-[1.7] sm:text-3xl">
+              <p lang="my" className="mt-2 font-myanmar text-xl leading-[1.7] sm:text-3xl">
                 {card.meaning || "—"}
               </p>
             </div>

@@ -142,7 +142,7 @@ export function SumiApp() {
   if (!ready || !decks) return <DeskFallback />;
 
   return (
-    <div className="min-h-dvh">
+    <div className="flex min-h-dvh flex-col">
       <SiteHeader title={active?.name} onBack={deckId ? closeStudy : undefined} />
       {corrupt ? (
         <div className="mx-auto mt-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-destructive/30 bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
