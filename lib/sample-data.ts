@@ -23,7 +23,7 @@ export const SAMPLE_VOCAB: ParsedRow[] = [
   { kanji: "調べる", reading: "しらべる", meaning: "စုံစမ်းသည်" },
 ];
 
-/** A textbook-shaped page used when Google Vision is not configured. */
+/** A textbook-shaped page used when the Gemini API is not configured. */
 export const MOCK_TEXTBOOK_PAGE = [
   "N2 語彙",
   "単語　読み　意味",

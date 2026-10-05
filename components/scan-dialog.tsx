@@ -22,13 +22,13 @@ export type ScanDialogHandle = {
 export function ScanDialog({
   ref,
   open,
-  visionConfigured,
+  geminiConfigured,
   onOpenChange,
   onResult,
 }: {
   ref?: React.Ref<ScanDialogHandle>;
   open: boolean;
-  visionConfigured: boolean | null;
+  geminiConfigured: boolean | null;
   onOpenChange: (open: boolean) => void;
   onResult: (result: OcrSuccess) => void;
 }) {
@@ -100,9 +100,9 @@ export function ScanDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {visionConfigured === false ? (
+        {geminiConfigured === false ? (
           <p className="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-6">
-            No Vision API key is set on this server. The next step opens a practice page in the same shape as a scanned list.
+            No Gemini API key is set on this server. The next step opens a practice page in the same shape as a scanned list.
           </p>
         ) : null}
 

@@ -2,7 +2,7 @@ export type Grade = "easy" | "hard";
 
 export type DeckSource = "sample" | "scan" | "manual";
 
-export type ScanMode = "vision" | "mock";
+export type ScanMode = "gemini" | "mock";
 
 export type Card = {
   id: string;

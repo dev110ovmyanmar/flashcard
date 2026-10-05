@@ -8,7 +8,7 @@ function isSuccess(value: unknown): value is OcrSuccess {
   return (
     isRecord(value) &&
     value.ok === true &&
-    (value.source === "vision" || value.source === "mock") &&
+    (value.source === "gemini" || value.source === "mock") &&
     typeof value.message === "string" &&
     Array.isArray(value.rows) &&
     typeof value.rawText === "string"
@@ -43,7 +43,7 @@ export async function requestOcr(
   return data;
 }
 
-export async function fetchVisionStatus(signal?: AbortSignal): Promise<boolean> {
+export async function fetchOcrStatus(signal?: AbortSignal): Promise<boolean> {
   const response = await fetch("/api/ocr", { signal });
   const data: unknown = await response.json();
   return isRecord(data) && data.configured === true;

@@ -11,7 +11,7 @@ import { SiteHeader } from "@/components/site-header";
 import { StudySession } from "@/components/study-session";
 import { Button } from "@/components/ui/button";
 import { useDecks } from "@/hooks/use-decks";
-import { fetchVisionStatus } from "@/lib/client-ocr";
+import { fetchOcrStatus } from "@/lib/client-ocr";
 import { blankRows, createDeck, mergeDeck, withIds } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
 import { createSampleDeck } from "@/lib/sample-data";
@@ -36,13 +36,13 @@ export function SumiApp() {
   const [scanOpen, setScanOpen] = useState(false);
   const scanRef = useRef<ScanDialogHandle>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
-  const [vision, setVision] = useState<boolean | null>(null);
+  const [geminiReady, setGeminiReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchVisionStatus(controller.signal)
-      .then(setVision)
-      .catch(() => setVision(false));
+    fetchOcrStatus(controller.signal)
+      .then(setGeminiReady)
+      .catch(() => setGeminiReady(false));
     return () => controller.abort();
   }, []);
 
@@ -166,7 +166,7 @@ export function SumiApp() {
       ) : (
         <DeckLibrary
           decks={decks}
-          visionConfigured={vision}
+          geminiConfigured={geminiReady}
           onScan={openScan}
           onType={openManual}
           onFile={(file) => {
@@ -187,7 +187,7 @@ export function SumiApp() {
       <ScanDialog
         ref={scanRef}
         open={scanOpen}
-        visionConfigured={vision}
+        geminiConfigured={geminiReady}
         onOpenChange={setScanOpen}
         onResult={handleScanResult}
       />

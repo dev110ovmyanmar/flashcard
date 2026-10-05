@@ -14,7 +14,8 @@ function asSource(value: unknown): DeckSource {
 }
 
 function asScanMode(value: unknown): ScanMode | undefined {
-  if (value === "vision" || value === "mock") return value;
+  if (value === "mock") return value;
+  if (value === "gemini" || value === "vision") return "gemini";
   return undefined;
 }
 

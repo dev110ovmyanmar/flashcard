@@ -20,7 +20,7 @@ import type { Deck } from "@/lib/types";
 
 export function DeckLibrary({
   decks,
-  visionConfigured,
+  geminiConfigured,
   onScan,
   onType,
   onFile,
@@ -30,7 +30,7 @@ export function DeckLibrary({
   onRestoreSample,
 }: {
   decks: Deck[];
-  visionConfigured: boolean | null;
+  geminiConfigured: boolean | null;
   onScan: () => void;
   onType: () => void;
   onFile: (file: File) => void;
@@ -66,11 +66,11 @@ export function DeckLibrary({
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            {visionConfigured === null
+            {geminiConfigured === null
               ? "Checking the reader…"
-              : visionConfigured
-                ? "Google Vision is connected and will read the photo."
-                : "Practice mode: scans open an editable N2 page until a Vision API key is added."}
+              : geminiConfigured
+                ? "Gemini is connected and will read the photo."
+                : "Practice mode: scans open an editable N2 page until a Gemini API key is added."}
           </p>
         </div>
 

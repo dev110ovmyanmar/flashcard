@@ -1,5 +1,6 @@
+import { buildGeminiRequest, geminiModelName, rowsFromGemini } from "@/lib/gemini-ocr";
+import { parseVocabLines } from "@/lib/parse-vocab";
 import { MOCK_TEXTBOOK_PAGE } from "@/lib/sample-data";
-import { parseVocabLines, rowsFromVision } from "@/lib/parse-vocab";
 import type { OcrFailure, OcrSuccess } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -7,8 +8,8 @@ export const dynamic = "force-dynamic";
 
 const MAX_BASE64_CHARS = 6_000_000;
 
-function visionKey(): string | null {
-  const key = process.env.GOOGLE_CLOUD_VISION_API_KEY || process.env.GOOGLE_VISION_API_KEY;
+function geminiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const trimmed = key?.trim();
   return trimmed ? trimmed : null;
 }
@@ -28,7 +29,7 @@ function safeMessage(message: string): string {
 }
 
 export async function GET() {
-  return json({ configured: Boolean(visionKey()) });
+  return json({ configured: Boolean(geminiKey()) });
 }
 
 export async function POST(request: Request) {
@@ -61,36 +62,33 @@ export async function POST(request: Request) {
     return json({ ok: false, error: "That photo is too large. Try a closer crop." }, 413);
   }
 
-  const key = visionKey();
+  const key = geminiKey();
   if (!key) {
     const rows = parseVocabLines(MOCK_TEXTBOOK_PAGE.split("\n"));
     const payload: OcrSuccess = {
       ok: true,
       source: "mock",
       message:
-        "No Vision API key is set, so this is a practice page rather than your photo. Edit every row to match your book, or add GOOGLE_CLOUD_VISION_API_KEY to read the scan.",
+        "No Gemini API key is set, so this is a practice page rather than your photo. Edit every row to match your book, or add GEMINI_API_KEY to read the scan.",
       rows,
       rawText: MOCK_TEXTBOOK_PAGE,
     };
     return json(payload);
   }
 
+  const model = geminiModelName(process.env.GEMINI_MODEL);
+
   try {
     const response = await fetch(
-      `https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(key)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          requests: [
-            {
-              image: { content: imageBase64 },
-              features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-              imageContext: { languageHints: ["ja", "my"] },
-            },
-          ],
-        }),
-        signal: AbortSignal.timeout(20_000),
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": key,
+        },
+        body: JSON.stringify(buildGeminiRequest(imageBase64, mimeType, model)),
+        signal: AbortSignal.timeout(45_000),
       },
     );
 
@@ -105,29 +103,29 @@ export async function POST(request: Request) {
         "message" in payload.error &&
         typeof payload.error.message === "string"
           ? payload.error.message
-          : `Vision returned ${response.status}.`;
-      console.error("Vision OCR failed", safeMessage(message));
+          : `Gemini returned ${response.status}.`;
+      console.error("Gemini OCR failed", safeMessage(message));
       return json(
         {
           ok: false,
-          error: `Google Vision couldn't read the page. ${safeMessage(message)}`,
+          error: `Gemini could not read the page. ${safeMessage(message)}`,
         },
         502,
       );
     }
 
-    const parsed = rowsFromVision(payload);
-    if (parsed.error) {
-      console.error("Vision OCR failed", safeMessage(parsed.error));
+    const parsed = rowsFromGemini(payload);
+    if (parsed.error && parsed.rows.length === 0) {
+      console.error("Gemini OCR failed", safeMessage(parsed.error));
       return json(
-        { ok: false, error: `Google Vision couldn't read the page. ${safeMessage(parsed.error)}` },
+        { ok: false, error: `Gemini could not read the page. ${safeMessage(parsed.error)}` },
         502,
       );
     }
 
     const success: OcrSuccess = {
       ok: true,
-      source: "vision",
+      source: "gemini",
       message: parsed.rows.length
         ? `Read ${parsed.rows.length} row${parsed.rows.length === 1 ? "" : "s"} from the photo. Correct anything that looks off before saving.`
         : "The photo was read, but no vocabulary rows were found. Type them in below.",
@@ -137,9 +135,9 @@ export async function POST(request: Request) {
     return json(success);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The request failed.";
-    console.error("Vision OCR failed", safeMessage(message));
+    console.error("Gemini OCR failed", safeMessage(message));
     return json(
-      { ok: false, error: "Google Vision didn't respond. Check the key and try the photo again." },
+      { ok: false, error: "Gemini did not respond. Check the key and try the photo again." },
       502,
     );
   }

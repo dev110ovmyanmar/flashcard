@@ -21,17 +21,16 @@ npm run build
 
 ## Read a real textbook photo
 
-Scans use the [Cloud Vision API](https://cloud.google.com/vision/docs/ocr) `DOCUMENT_TEXT_DETECTION` feature, with Japanese and Myanmar language hints. Without a key, the app still runs: it opens a practice N2 page in the same editor so you can try the full flow.
+Scans send the photo to the [Gemini API](https://ai.google.dev/gemini-api/docs). The model returns each row as kanji, hiragana or katakana, and the Myanmar meaning. Without a key, the app still runs: it opens a practice N2 page in the same editor so you can try the full flow.
 
-1. Enable Cloud Vision API on a Google Cloud project.
-2. Create an API key.
-3. Copy `.env.example` to `.env.local`:
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/apikey).
+2. Copy `.env.example` to `.env.local`:
 
 ```bash
-GOOGLE_CLOUD_VISION_API_KEY=your-key
+GEMINI_API_KEY=your-key
 ```
 
-`GOOGLE_VISION_API_KEY` is accepted as an alias. Restart the dev server after adding the key.
+`GOOGLE_GENERATIVE_AI_API_KEY` is accepted as an alias. Set `GEMINI_MODEL` if you want a model other than `gemini-2.5-flash`. Restart the dev server after adding the key.
 
 ## Study
 
@@ -46,7 +45,7 @@ GOOGLE_CLOUD_VISION_API_KEY=your-key
 
 ```
 app/
-  api/ocr/route.ts       Google Vision endpoint and practice fallback
+  api/ocr/route.ts       Gemini OCR endpoint and practice fallback
   layout.tsx
   page.tsx
   globals.css
@@ -59,7 +58,8 @@ components/
   sumi-app.tsx
 hooks/use-decks.ts       localStorage
 lib/
-  parse-vocab.ts         row parser for Vision text and word boxes
+  parse-vocab.ts         textbook row parser
+  gemini-ocr.ts          Gemini request and JSON row reader
   srs.ts                 easy / hard scheduling
   sample-data.ts         N2 sample deck
   storage.ts
