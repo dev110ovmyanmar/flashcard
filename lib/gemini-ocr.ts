@@ -29,20 +29,121 @@ export function geminiModelChain(preferred: string | undefined): string[] {
   return [primary, ...GEMINI_FALLBACK_MODELS.filter((model) => model !== primary)];
 }
 
+export type GeminiAttempt = { thinking: boolean; structured: boolean };
+
 export function geminiErrorMessage(payload: unknown, status: number): string {
-  if (isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string") {
-    return payload.error.message;
-  }
+  const message = findErrorMessage(unwrapGeminiPayload(payload));
+  if (message) return message;
+  const snippet = payloadSnippet(payload);
+  if (snippet) return snippet;
   return `Gemini returned ${status}.`;
 }
 
+export function isGeminiAuthError(message: string): boolean {
+  return /api key not valid|api_key_invalid|permission denied|unregistered callers|consumer identity|authentication/i.test(
+    message,
+  );
+}
+
+export function isGeminiModelError(message: string): boolean {
+  return /thinking level|not supported for this model|no longer available|not found|unknown model|does not exist|not available to new users/i.test(
+    message,
+  );
+}
+
+export function isGeminiShapeError(message: string): boolean {
+  return /unknown parameter|response_format|response format|json schema|invalid schema|mime_type|additional propert/i.test(
+    message,
+  );
+}
+
 export function shouldTryNextModel(status: number, message: string): boolean {
+  if (isGeminiAuthError(message)) return false;
+  if (isGeminiModelError(message)) return true;
   if (status === 404 || status === 408 || status === 429 || status === 500 || status === 503 || status === 504) {
     return true;
   }
-  return /high demand|try again later|overloaded|unavailable|resource exhausted|currently experiencing|no longer available|not found|does not exist/i.test(
-    message,
-  );
+  return /high demand|try again later|overloaded|unavailable|resource exhausted|currently experiencing/i.test(message);
+}
+
+/** What to do after one model rejects a scan. Auth stops; thinking and schema errors retry this model first. */
+export function nextGeminiAttempt(
+  status: number,
+  message: string,
+  attempt: GeminiAttempt,
+): "auth" | "billing" | "stop" | "next-model" | GeminiAttempt {
+  if (status === 401 || status === 403 || isGeminiAuthError(message)) return "auth";
+  if (status === 402 || /payment required|credit balance|billing account/i.test(message)) return "billing";
+  if (attempt.thinking && /thinking level/i.test(message)) return { ...attempt, thinking: false };
+  if (attempt.structured && isGeminiShapeError(message)) return { thinking: false, structured: false };
+  if (shouldTryNextModel(status, message)) return "next-model";
+  return "stop";
+}
+
+function unwrapGeminiPayload(payload: unknown): unknown {
+  if (Array.isArray(payload)) return payload.find(isRecord) ?? payload[0];
+  return payload;
+}
+
+function findErrorMessage(payload: unknown): string | undefined {
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const nested = findErrorMessage(item);
+      if (nested) return nested;
+    }
+    return undefined;
+  }
+  if (!isRecord(payload)) return undefined;
+
+  const direct = textValue(payload.message) ?? textValue(payload.error);
+  const error = isRecord(payload.error) ? payload.error : undefined;
+  const fromError = error ? textValue(error.message) : undefined;
+  const fromDetails = detailMessage(error ?? payload);
+  const specific = [fromError, fromDetails, direct].find((item) => item && !isGenericMessage(item));
+  if (specific) return specific;
+  if (fromError) return fromError;
+  if (direct) return direct;
+  if (fromDetails) return fromDetails;
+  if (error && typeof error.status === "string" && error.status.trim()) return error.status.trim();
+  if (typeof error?.code === "string" && error.code.trim() && Number.isNaN(Number(error.code))) return error.code.trim();
+  return undefined;
+}
+
+function textValue(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const parts = value.map(textValue).filter((item): item is string => Boolean(item));
+    if (parts.length > 0) return parts.join(" ");
+  }
+  return undefined;
+}
+
+function detailMessage(record: Record<string, unknown>): string | undefined {
+  const details = Array.isArray(record.details) ? record.details : Array.isArray(record.errors) ? record.errors : [];
+  for (const detail of details) {
+    const message = isRecord(detail) ? textValue(detail.message) ?? textValue(detail.reason) : textValue(detail);
+    if (message) return message;
+  }
+  return undefined;
+}
+
+function isGenericMessage(message: string): boolean {
+  return /^(bad request|invalid argument|request contains an invalid argument|invalid_argument)\.?$/i.test(message.trim());
+}
+
+function payloadSnippet(payload: unknown): string | undefined {
+  if (payload == null) return undefined;
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed ? trimmed.slice(0, 240) : undefined;
+  }
+  try {
+    const json = JSON.stringify(payload);
+    return json && json !== "{}" && json !== "[]" ? json.slice(0, 240) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const RESPONSE_SCHEMA = {
@@ -75,7 +176,14 @@ function generationThinking(model: string): { thinking_level: "minimal" | "low" 
   return level ? { thinking_level: level } : {};
 }
 
-export function buildGeminiRequest(imageBase64: string, mimeType: string, model = DEFAULT_GEMINI_MODEL) {
+export function buildGeminiRequest(
+  imageBase64: string,
+  mimeType: string,
+  model = DEFAULT_GEMINI_MODEL,
+  options?: { thinking?: boolean; structured?: boolean },
+) {
+  const thinking = options?.thinking !== false;
+  const structured = options?.structured !== false;
   return {
     model,
     store: false,
@@ -83,14 +191,18 @@ export function buildGeminiRequest(imageBase64: string, mimeType: string, model 
       { type: "text", text: PROMPT },
       { type: "image", data: imageBase64, mime_type: mimeType },
     ],
-    response_format: {
-      type: "text",
-      mime_type: "application/json",
-      schema: RESPONSE_SCHEMA,
-    },
+    ...(structured
+      ? {
+          response_format: {
+            type: "text",
+            mime_type: "application/json",
+            schema: RESPONSE_SCHEMA,
+          },
+        }
+      : {}),
     generation_config: {
       max_output_tokens: 3072,
-      ...generationThinking(model),
+      ...(thinking ? generationThinking(model) : {}),
     },
   };
 }
@@ -236,5 +348,5 @@ function clip(value: string, max: number): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildGeminiRequest, geminiModelChain, geminiModelName, rowsFromGemini, shouldTryNextModel, thinkingLevelFor } from "./gemini-ocr";
+import { buildGeminiRequest, geminiErrorMessage, geminiModelChain, geminiModelName, isGeminiAuthError, nextGeminiAttempt, rowsFromGemini, shouldTryNextModel, thinkingLevelFor } from "./gemini-ocr";
 
 test("reads structured rows from an Interactions response", () => {
   const result = rowsFromGemini({
@@ -123,6 +123,54 @@ test("falls through to another Flash model when one is at capacity", () => {
     true,
   );
   assert.equal(shouldTryNextModel(400, "API key not valid."), false);
+});
+
+test("reads a Google error wrapped in a list", () => {
+  const message = geminiErrorMessage(
+    [
+      {
+        error: {
+          code: 400,
+          message: "Request contains an invalid argument.",
+          status: "INVALID_ARGUMENT",
+          details: [{ message: "API key not valid. Please pass a valid API key." }],
+        },
+      },
+    ],
+    400,
+  );
+  assert.match(
+    geminiErrorMessage(
+      [{ error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } }],
+      400,
+    ),
+    /API key not valid/,
+  );
+  assert.match(message, /API key not valid/);
+  assert.equal(isGeminiAuthError(message), true);
+  assert.equal(shouldTryNextModel(400, message), false);
+  assert.equal(nextGeminiAttempt(400, message, { thinking: true, structured: true }), "auth");
+  assert.deepEqual(
+    nextGeminiAttempt(400, "Thinking level THINKING_LEVEL_MINIMAL is not supported for this model.", {
+      thinking: true,
+      structured: true,
+    }),
+    { thinking: false, structured: true },
+  );
+  assert.deepEqual(nextGeminiAttempt(400, "Unknown parameter 'response_format.schema'.", { thinking: true, structured: true }), {
+    thinking: false,
+    structured: false,
+  });
+});
+
+test("can send a plain reading when structured output is rejected", () => {
+  const request = buildGeminiRequest("abc", "image/jpeg", "gemini-3.5-flash-lite", { thinking: false, structured: false });
+  assert.equal("response_format" in request, false);
+  assert.equal("thinking_level" in request.generation_config, false);
+});
+
+test("reads a plain-text error body", () => {
+  assert.match(geminiErrorMessage("API key not valid. Please pass a valid API key.", 400), /API key not valid/);
 });
 
 test("rejects a model name that is not a single token", () => {

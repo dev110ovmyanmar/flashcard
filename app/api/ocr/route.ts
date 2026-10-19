@@ -2,8 +2,10 @@ import {
   buildGeminiRequest,
   geminiErrorMessage,
   geminiModelChain,
+  nextGeminiAttempt,
   rowsFromGemini,
   shouldTryNextModel,
+  type GeminiAttempt,
 } from "@/lib/gemini-ocr";
 import { parseVocabLines } from "@/lib/parse-vocab";
 import { MOCK_TEXTBOOK_PAGE } from "@/lib/sample-data";
@@ -32,6 +34,16 @@ function cleanBase64(input: string): string {
 
 function safeMessage(message: string): string {
   return message.replace(/key=[^&\s]+/gi, "key=…").slice(0, 240);
+}
+
+async function readGeminiBody(response: Response): Promise<unknown> {
+  const raw = await response.text();
+  if (!raw.trim()) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
 }
 
 export async function GET() {
@@ -86,48 +98,84 @@ export async function POST(request: Request) {
   let lastMessage = "Gemini did not respond. Check the key and try the photo again.";
 
   for (const model of models) {
-    try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-goog-api-key": key,
-        },
-        body: JSON.stringify(buildGeminiRequest(imageBase64, mimeType, model)),
-        signal: AbortSignal.timeout(18_000),
-      });
+    let attempt: GeminiAttempt | "next-model" = { thinking: true, structured: true };
+    for (let tryIndex = 0; tryIndex < 3 && attempt !== "next-model"; tryIndex += 1) {
+      const current = attempt;
+      try {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-goog-api-key": key,
+          },
+          body: JSON.stringify(
+            buildGeminiRequest(imageBase64, mimeType, model, {
+              thinking: current.thinking,
+              structured: current.structured,
+            }),
+          ),
+          signal: AbortSignal.timeout(18_000),
+        });
 
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message = geminiErrorMessage(payload, response.status);
+        const payload = await readGeminiBody(response);
+        if (!response.ok) {
+          const message = geminiErrorMessage(payload, response.status);
+          console.error("Gemini OCR failed", model, safeMessage(message));
+          lastMessage = message;
+          const next = nextGeminiAttempt(response.status, message, current);
+          if (next === "auth") {
+            return json(
+              {
+                ok: false,
+                error: "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
+              },
+              502,
+            );
+          }
+          if (next === "billing") {
+            return json(
+              {
+                ok: false,
+                error: "This Gemini key has no credits left. Add billing in Google AI Studio, then scan again.",
+              },
+              502,
+            );
+          }
+          if (next === "stop") {
+            return json({ ok: false, error: `Gemini could not read the page. ${safeMessage(message)}` }, 502);
+          }
+          attempt = next;
+          continue;
+        }
+
+        const parsed = rowsFromGemini(payload);
+        if (parsed.error && parsed.rows.length === 0) {
+          console.error("Gemini OCR failed", model, safeMessage(parsed.error));
+          lastMessage = parsed.error;
+          const next = nextGeminiAttempt(response.status, parsed.error, current);
+          if (next === "auth" || next === "billing" || next === "stop") {
+            return json({ ok: false, error: `Gemini could not read the page. ${safeMessage(parsed.error)}` }, 502);
+          }
+          attempt = next;
+          continue;
+        }
+
+        const success: OcrSuccess = {
+          ok: true,
+          source: "gemini",
+          message: parsed.rows.length
+            ? `Read ${parsed.rows.length} row${parsed.rows.length === 1 ? "" : "s"} from the photo. Correct anything that looks off before saving.`
+            : "The photo was read, but no vocabulary rows were found. Type them in below.",
+          rows: parsed.rows,
+          rawText: parsed.rawText,
+        };
+        return json(success);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The request failed.";
         console.error("Gemini OCR failed", model, safeMessage(message));
         lastMessage = message;
-        if (shouldTryNextModel(response.status, message)) continue;
-        return json({ ok: false, error: `Gemini could not read the page. ${safeMessage(message)}` }, 502);
+        break;
       }
-
-      const parsed = rowsFromGemini(payload);
-      if (parsed.error && parsed.rows.length === 0) {
-        console.error("Gemini OCR failed", model, safeMessage(parsed.error));
-        lastMessage = parsed.error;
-        if (shouldTryNextModel(response.status, parsed.error)) continue;
-        return json({ ok: false, error: `Gemini could not read the page. ${safeMessage(parsed.error)}` }, 502);
-      }
-
-      const success: OcrSuccess = {
-        ok: true,
-        source: "gemini",
-        message: parsed.rows.length
-          ? `Read ${parsed.rows.length} row${parsed.rows.length === 1 ? "" : "s"} from the photo. Correct anything that looks off before saving.`
-          : "The photo was read, but no vocabulary rows were found. Type them in below.",
-        rows: parsed.rows,
-        rawText: parsed.rawText,
-      };
-      return json(success);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "The request failed.";
-      console.error("Gemini OCR failed", model, safeMessage(message));
-      lastMessage = message;
     }
   }
 
