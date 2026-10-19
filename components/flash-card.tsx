@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import { cardFace } from "@/lib/decks";
 import type { Card } from "@/lib/types";
 
 function kanjiClass(text: string): string {
@@ -23,13 +24,14 @@ export function FlashCard({
   onFlip: () => void;
 }) {
   const reduce = useReducedMotion();
+  const face = cardFace(card);
 
   return (
     <div
       role="button"
       tabIndex={0}
       aria-pressed={flipped}
-      aria-label={flipped ? `Hide the answer for ${card.kanji}` : `Show the reading and meaning for ${card.kanji}`}
+      aria-label={flipped ? `Hide the answer for ${face}` : `Show the reading and meaning for ${face}`}
       onClick={onFlip}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -50,8 +52,8 @@ export function FlashCard({
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-primary/80" />
           <div className="flex h-full w-full flex-col items-center justify-between px-5 py-6 sm:px-10 sm:py-8">
             <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{deckName}</p>
-            <p lang="ja" className={`font-serif leading-none tracking-tight text-foreground ${kanjiClass(card.kanji)}`}>
-              {card.kanji}
+            <p lang="ja" className={`font-serif leading-none tracking-tight text-foreground ${kanjiClass(face)}`}>
+              {face}
             </p>
             <p className="text-sm text-muted-foreground">Tap to reveal</p>
           </div>
@@ -60,9 +62,11 @@ export function FlashCard({
         <div className={`flip-face flip-face-back card-wash border border-border shadow-[0_30px_70px_-28px_color-mix(in_oklab,var(--foreground)_35%,transparent)] ${flipped ? "" : "pointer-events-none"}`} aria-hidden={!flipped}>
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-moss/80" />
           <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-5 py-6 text-center sm:gap-6 sm:px-10 sm:py-8">
-            <p lang="ja" className="font-serif text-lg text-muted-foreground">
-              {card.kanji}
-            </p>
+            {card.kanji.trim() ? (
+              <p lang="ja" className="font-serif text-lg text-muted-foreground">
+                {card.kanji}
+              </p>
+            ) : null}
             <div>
               <p className="text-[11px] tracking-[0.16em] text-muted-foreground uppercase">Reading</p>
               <p lang="ja" className="mt-2 font-serif text-3xl leading-tight sm:text-5xl">

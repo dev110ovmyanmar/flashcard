@@ -2,6 +2,14 @@ import { uid } from "@/lib/id";
 import { isWeak } from "@/lib/srs";
 import type { Card, Deck, DeckSource, ScanMode, VocabRow } from "@/lib/types";
 
+export function cardFace(card: Pick<Card, "kanji" | "reading">): string {
+  return card.kanji.trim() || card.reading.trim();
+}
+
+function hasFace(row: Pick<VocabRow, "kanji" | "reading">): boolean {
+  return Boolean(row.kanji.trim() || row.reading.trim());
+}
+
 export function freshCard(row: Pick<VocabRow, "id" | "kanji" | "reading" | "meaning">, now = Date.now()): Card {
   return {
     id: row.id || uid("card"),
@@ -32,13 +40,13 @@ export function createDeck(input: {
     updatedAt: now,
     source: input.source,
     scanMode: input.scanMode,
-    cards: input.rows.filter((row) => row.kanji.trim()).map((row) => freshCard(row, now)),
+    cards: input.rows.filter(hasFace).map((row) => freshCard(row, now)),
   };
 }
 
 export function mergeDeck(deck: Deck, name: string, rows: VocabRow[], now = Date.now()): Deck {
   const cards = rows
-    .filter((row) => row.kanji.trim())
+    .filter(hasFace)
     .map((row) => {
       const previous = deck.cards.find((card) => card.id === row.id);
       if (!previous) return freshCard(row, now);

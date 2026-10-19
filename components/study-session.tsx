@@ -285,7 +285,7 @@ export function StudySession({
         </Button>
       </div>
       <p className="mt-3 text-center text-xs text-muted-foreground sm:hidden">
-        {flipped ? "Tap the card to hide the answer." : "Tap the card to see the reading."}
+        {flipped ? "Tap the card to hide the answer." : current?.kanji.trim() ? "Tap the card to see the reading." : "Tap the card to see the meaning."}
       </p>
       <p className="mt-3 hidden text-center text-xs text-muted-foreground sm:block">
         {flipped ? "← review again · → got it" : "The first tap shows the answer. Space flips the card."}

@@ -67,7 +67,7 @@ export function SumiApp() {
       name: datedDeckName("New deck"),
       rows: blankRows(3),
       source: "manual",
-      banner: "Type the kanji, the hiragana reading, and the Myanmar meaning. Empty rows are ignored.",
+      banner: "Type the hiragana and the Myanmar meaning. Add kanji when the word has it. Empty rows are ignored.",
     });
   }
 

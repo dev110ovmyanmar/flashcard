@@ -67,10 +67,10 @@ export function ReviewDialog({
       setFormError("Add at least one card.");
       return;
     }
-    const missing = filled.filter((row) => !row.kanji.trim() || !row.reading.trim() || !row.meaning.trim());
+    const missing = filled.filter((row) => !row.reading.trim() || !row.meaning.trim());
     if (missing.length) {
       setInvalid(new Set(missing.map((row) => row.id)));
-      setFormError("Each card needs kanji, a reading, and a Myanmar meaning — or clear the row.");
+      setFormError("Each card needs hiragana and a Myanmar meaning. Kanji can stay blank, or clear the row.");
       return;
     }
     setInvalid(new Set());
@@ -129,7 +129,7 @@ export function ReviewDialog({
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div className="space-y-1">
                       <Label htmlFor={`${row.id}-kanji`} className="text-xs text-muted-foreground">
-                        Kanji
+                        Kanji <span className="text-muted-foreground/70">· optional</span>
                       </Label>
                       <Input
                         id={`${row.id}-kanji`}

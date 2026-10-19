@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deckStats } from "@/lib/decks";
+import { cardFace, deckStats } from "@/lib/decks";
 import { formatUpdated, sourceLabel } from "@/lib/format";
 import { SAMPLE_DECK_ID } from "@/lib/sample-data";
 import type { Deck } from "@/lib/types";
@@ -104,7 +104,7 @@ export function DeckLibrary({
           </div>
           <p className="mt-4 text-sm font-medium">Drop a textbook photo here</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Rows like these become cards. The front shows only the kanji.
+            Rows like these become cards. The front shows the kanji, or the hiragana when a word has none.
           </p>
         </button>
 
@@ -145,7 +145,7 @@ export function DeckLibrary({
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {ordered.map((deck, index) => {
               const stats = deckStats(deck);
-              const lead = deck.cards[0]?.kanji ?? "文";
+              const lead = (deck.cards[0] ? cardFace(deck.cards[0]) : "") || "文";
               return (
                 <motion.li
                   key={deck.id}
