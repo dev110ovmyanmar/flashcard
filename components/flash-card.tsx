@@ -16,11 +16,13 @@ export function FlashCard({
   card,
   deckName,
   flipped,
+  tilt = 0,
   onFlip,
 }: {
   card: Card;
   deckName: string;
   flipped: boolean;
+  tilt?: number;
   onFlip: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -44,7 +46,7 @@ export function FlashCard({
     >
       <motion.div
         className="flip-inner"
-        animate={{ rotateY: flipped ? 180 : 0 }}
+        animate={{ rotateY: flipped ? 180 : 0, rotateX: reduce ? 0 : tilt }}
         transition={reduce ? { duration: 0.01 } : { type: "spring", stiffness: 170, damping: 22, mass: 0.85 }}
         style={{ transformStyle: "preserve-3d" }}
       >
@@ -55,7 +57,7 @@ export function FlashCard({
             <p lang="ja" className={`font-serif leading-none tracking-tight text-foreground ${kanjiClass(face)}`}>
               {face}
             </p>
-            <p className="text-sm text-muted-foreground">Tap to reveal</p>
+            <p className="text-sm text-muted-foreground">Swipe up to flip</p>
           </div>
         </div>
 

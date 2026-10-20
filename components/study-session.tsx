@@ -1,11 +1,12 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import { Check, RotateCcw, Undo2 } from "lucide-react";
+import { AnimatePresence, motion, type PanInfo } from "framer-motion";
+import { Check, RotateCcw, RotateCw, Undo2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Confetti } from "@/components/confetti";
 import { FlashCard } from "@/components/flash-card";
 import { Button } from "@/components/ui/button";
+import { cardGesture } from "@/lib/card-gesture";
 import { isWeak } from "@/lib/srs";
 import type { Card, Deck, Grade } from "@/lib/types";
 
@@ -15,6 +16,7 @@ type Phase = "study" | "done" | "empty";
 type Session = {
   queue: string[];
   order: string[];
+  trail: string[];
   mastered: string[];
   repeats: Record<string, number>;
   phase: Phase;
@@ -31,6 +33,7 @@ function startSession(deck: Deck, mode: Mode): Session {
   return {
     queue: ids,
     order: ids,
+    trail: [],
     mastered: [],
     repeats: {},
     phase: ids.length ? "study" : "empty",
@@ -49,10 +52,12 @@ export function StudySession({
   const [mode, setMode] = useState<Mode>("all");
   const [session, setSession] = useState<Session>(() => startSession(deck, "all"));
   const [flipped, setFlipped] = useState(false);
+  const [tilt, setTilt] = useState(0);
   const [direction, setDirection] = useState(1);
   const [tick, setTick] = useState(0);
   const [history, setHistory] = useState<History | null>(null);
   const lock = useRef(false);
+  const skipClick = useRef(false);
   const stageRef = useRef<HTMLDivElement>(null);
 
   function changeMode(next: Mode) {
@@ -71,12 +76,97 @@ export function StudySession({
   const repeat = current ? (session.repeats[current.id] ?? 0) > 0 : false;
   const progress = total === 0 ? 0 : Math.round((session.mastered.length / total) * 100);
 
-  function revealOr(grade: Grade) {
-    if (!flipped) {
-      setFlipped(true);
+  function turnCard() {
+    if (skipClick.current) {
+      skipClick.current = false;
       return;
     }
-    commitGrade(grade);
+    setFlipped((value) => !value);
+  }
+
+  function nudge(next: Session, dir: number) {
+    setDirection(dir);
+    setFlipped(false);
+    setTilt(0);
+    setTick((value) => value + 1);
+    setSession(next);
+  }
+
+  function goNext() {
+    if (!current || session.queue.length < 2 || lock.current) return;
+    lock.current = true;
+    window.setTimeout(() => {
+      lock.current = false;
+    }, 320);
+    const [first, ...rest] = session.queue;
+    nudge({ ...session, queue: [...rest, first], trail: [...session.trail, first] }, 1);
+  }
+
+  function goPrevious() {
+    const previous = session.trail[session.trail.length - 1];
+    if (!current || !previous || lock.current) return;
+    lock.current = true;
+    window.setTimeout(() => {
+      lock.current = false;
+    }, 320);
+    nudge(
+      {
+        ...session,
+        trail: session.trail.slice(0, -1),
+        queue: [previous, ...session.queue.filter((id) => id !== previous)],
+      },
+      -1,
+    );
+  }
+
+  function onDrag(_: PointerEvent, info: PanInfo) {
+    const across = Math.abs(info.offset.x);
+    const along = Math.abs(info.offset.y);
+    if (along <= across) {
+      setTilt(0);
+      return;
+    }
+    setTilt(Math.max(-18, Math.min(18, -info.offset.y / 12)));
+  }
+
+  function onDragEnd(_: PointerEvent, info: PanInfo) {
+    setTilt(0);
+    if (Math.hypot(info.offset.x, info.offset.y) > 10) {
+      skipClick.current = true;
+      window.setTimeout(() => {
+        skipClick.current = false;
+      }, 0);
+    }
+    const gesture = cardGesture(info.offset, info.velocity);
+    if (gesture === "next") goNext();
+    else if (gesture === "previous") goPrevious();
+    else if (gesture === "flip") setFlipped((value) => !value);
+  }
+
+  function flipAgain() {
+    if (!current || session.phase !== "study") return;
+    if (flipped) {
+      const alreadyMissed = (session.repeats[current.id] ?? 0) > 0;
+      if (!alreadyMissed) {
+        setHistory({ card: current, session });
+        onGrade(current.id, "hard");
+      }
+      setFlipped(false);
+      setSession((currentSession) => ({
+        ...currentSession,
+        repeats: {
+          ...currentSession.repeats,
+          [current.id]: (currentSession.repeats[current.id] ?? 0) + 1,
+        },
+      }));
+      return;
+    }
+
+    const missed = session.queue.filter((id) => (session.repeats[id] ?? 0) > 0);
+    const others = session.queue.filter((id) => (session.repeats[id] ?? 0) === 0);
+    const alreadyFirst = missed.length > 0 && session.queue.slice(0, missed.length).every((id) => missed.includes(id));
+    if (missed.length === 0 || (alreadyFirst && session.queue[0] === current.id)) return;
+    nudge({ ...session, queue: [...missed, ...others], trail: [] }, 1);
   }
 
   function commitGrade(grade: Grade) {
@@ -91,8 +181,10 @@ export function StudySession({
     onGrade(snapshot.id, grade);
     setDirection(grade === "easy" ? 1 : -1);
     setFlipped(false);
+    setTilt(0);
     setTick((value) => value + 1);
     setSession((currentSession) => {
+      const trail = currentSession.trail.filter((id) => id !== snapshot.id);
       if (grade === "easy") {
         const queue = currentSession.queue.slice(1);
         const mastered = currentSession.mastered.includes(snapshot.id)
@@ -101,6 +193,7 @@ export function StudySession({
         return {
           ...currentSession,
           queue,
+          trail,
           mastered,
           phase: queue.length ? "study" : "done",
         };
@@ -108,6 +201,7 @@ export function StudySession({
       return {
         ...currentSession,
         queue: [...currentSession.queue.slice(1), snapshot.id],
+        trail,
         repeats: {
           ...currentSession.repeats,
           [snapshot.id]: (currentSession.repeats[snapshot.id] ?? 0) + 1,
@@ -133,10 +227,10 @@ export function StudySession({
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (event.key === "ArrowLeft") {
         event.preventDefault();
-        revealOr("hard");
+        commitGrade("hard");
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
-        revealOr("easy");
+        commitGrade("easy");
       } else if (event.key === " " || event.key === "Enter") {
         if (tag === "BUTTON") return;
         event.preventDefault();
@@ -148,6 +242,9 @@ export function StudySession({
   });
 
   const struggled = Object.keys(session.repeats).length;
+  const missedCount = session.queue.filter((id) => (session.repeats[id] ?? 0) > 0).length;
+  const otherMissed = current ? session.queue.some((id) => id !== current.id && (session.repeats[id] ?? 0) > 0) : false;
+  const canFlipAgain = session.phase === "study" && Boolean(current) && (flipped || otherMissed);
 
   return (
     <div ref={stageRef} tabIndex={-1} className="mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] outline-none sm:px-0 sm:pt-5">
@@ -205,7 +302,7 @@ export function StudySession({
             <motion.div
               key={`${current.id}-${tick}`}
               custom={direction}
-              className="h-[min(48dvh,500px)] w-full sm:h-[min(62dvh,500px)]"
+              className="h-[min(42dvh,480px)] w-full sm:h-[min(62dvh,500px)]"
               variants={{
                 initial: { opacity: 0, y: 22, scale: 0.985 },
                 animate: { opacity: 1, y: 0, scale: 1 },
@@ -220,7 +317,18 @@ export function StudySession({
               exit="exit"
               transition={{ type: "spring", stiffness: 280, damping: 28 }}
             >
-              <FlashCard card={current} deckName={deck.name} flipped={flipped} onFlip={() => setFlipped((value) => !value)} />
+              <motion.div
+                className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
+                drag
+                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                dragElastic={0.18}
+                dragMomentum={false}
+                dragSnapToOrigin
+                onDrag={onDrag}
+                onDragEnd={onDragEnd}
+              >
+                <FlashCard card={current} deckName={deck.name} flipped={flipped} tilt={tilt} onFlip={turnCard} />
+              </motion.div>
             </motion.div>
           ) : (
             <motion.div
@@ -262,33 +370,46 @@ export function StudySession({
         </AnimatePresence>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:mt-5 sm:gap-3">
+      <div className="mt-4 flex flex-col gap-2 sm:mt-5">
         <Button
           type="button"
           variant="outline"
-          className="h-14 rounded-full bg-card/80 text-[15px] sm:h-12 sm:text-sm"
-          disabled={session.phase !== "study"}
-          onClick={() => revealOr("hard")}
+          className="h-12 rounded-full bg-card/80"
+          disabled={!canFlipAgain}
+          onClick={flipAgain}
         >
-          <RotateCcw />
-          <span className="sm:hidden">Again</span>
-          <span className="hidden sm:inline">Review again</span>
+          <RotateCw />
+          Flip again
+          {missedCount > 0 ? <span className="tabular-nums text-muted-foreground">{missedCount}</span> : null}
         </Button>
-        <Button
-          type="button"
-          className="h-14 rounded-full text-[15px] sm:h-12 sm:text-sm"
-          disabled={session.phase !== "study"}
-          onClick={() => revealOr("easy")}
-        >
-          <Check />
-          Got it
-        </Button>
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 rounded-full bg-card/80 text-[15px] sm:h-12 sm:text-sm"
+            disabled={session.phase !== "study"}
+            onClick={() => commitGrade("hard")}
+          >
+            <RotateCcw />
+            <span className="sm:hidden">Again</span>
+            <span className="hidden sm:inline">Review again</span>
+          </Button>
+          <Button
+            type="button"
+            className="h-14 rounded-full text-[15px] sm:h-12 sm:text-sm"
+            disabled={session.phase !== "study"}
+            onClick={() => commitGrade("easy")}
+          >
+            <Check />
+            Got it
+          </Button>
+        </div>
       </div>
       <p className="mt-3 text-center text-xs text-muted-foreground sm:hidden">
-        {flipped ? "Tap the card to hide the answer." : current?.kanji.trim() ? "Tap the card to see the reading." : "Tap the card to see the meaning."}
+        {flipped ? "Swipe left for the next card. Flip again stays on this one." : "Swipe up to flip. Swipe left for the next card."}
       </p>
       <p className="mt-3 hidden text-center text-xs text-muted-foreground sm:block">
-        {flipped ? "← review again · → got it" : "The first tap shows the answer. Space flips the card."}
+        Drag up to flip, left for the next card. Space flips. ← review again · → got it
       </p>
       <p className="sr-only" aria-live="polite">
         {flipped && current ? `${current.reading}. ${current.meaning}` : ""}
