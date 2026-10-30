@@ -2,7 +2,6 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { createSampleDeck } from "@/lib/sample-data";
 import { applyGrade } from "@/lib/srs";
 import { loadState, saveState } from "@/lib/storage";
 import type { Card, Deck, Grade } from "@/lib/types";
@@ -35,13 +34,12 @@ function ensureClientSnapshot(): DeckSnapshot {
     return snapshot;
   }
   if (!loaded.seeded && loaded.decks.length === 0) {
-    const decks = [createSampleDeck()];
     try {
-      saveState({ version: 1, seeded: true, decks });
+      saveState({ version: 1, seeded: true, decks: [] });
     } catch {
-      // The sample still shows in memory. The next explicit save will try again.
+      // Empty desk stays in memory until the next explicit save.
     }
-    snapshot = { decks, corrupt: false, hydrated: true };
+    snapshot = { decks: [], corrupt: false, hydrated: true };
     return snapshot;
   }
   snapshot = { decks: loaded.decks, corrupt: false, hydrated: true };
@@ -118,7 +116,11 @@ export function useDecks() {
   }, []);
 
   const startFresh = useCallback(() => {
-    commit([createSampleDeck()]);
+    commit([]);
+  }, []);
+
+  const replaceDecks = useCallback((decks: Deck[]) => {
+    commit(decks);
   }, []);
 
   return {
@@ -131,5 +133,6 @@ export function useDecks() {
     gradeCard,
     restoreCard,
     startFresh,
+    replaceDecks,
   };
 }

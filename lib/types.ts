@@ -1,6 +1,6 @@
 export type Grade = "easy" | "hard";
 
-export type DeckSource = "sample" | "scan" | "manual";
+export type DeckSource = "sample" | "scan" | "manual" | "jlpt";
 
 export type ScanMode = "gemini" | "mock";
 

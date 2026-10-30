@@ -22,7 +22,6 @@ export function ReviewDialog({
   title,
   description,
   banner,
-  rawText,
   initialName,
   initialRows,
   editing,
@@ -33,7 +32,6 @@ export function ReviewDialog({
   title: string;
   description: string;
   banner?: string;
-  rawText?: string;
   initialName: string;
   initialRows: VocabRow[];
   editing: boolean;
@@ -179,15 +177,6 @@ export function ReviewDialog({
             <Plus />
             Add a card
           </Button>
-
-          {rawText ? (
-            <details className="rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm">
-              <summary className="cursor-pointer font-medium">Text the scan returned</summary>
-              <pre className="mt-3 max-h-40 overflow-auto font-sans text-xs leading-5 whitespace-pre-wrap text-muted-foreground">
-                {rawText}
-              </pre>
-            </details>
-          ) : null}
 
           {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
         </div>

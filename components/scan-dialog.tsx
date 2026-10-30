@@ -19,6 +19,13 @@ export type ScanDialogHandle = {
   reset: () => void;
 };
 
+const actionBtnBase =
+  "h-11 w-full gap-2 overflow-hidden rounded-xl px-4 text-sm font-medium shadow-none transition-colors duration-200 [&_svg:not([class*='size-'])]:size-4";
+const actionPrimary =
+  `${actionBtnBase} border border-primary/25 bg-primary text-primary-foreground hover:bg-primary/90 dark:border-primary/40 dark:hover:bg-primary/85`;
+const actionSecondary =
+  `${actionBtnBase} border border-border/80 bg-background text-foreground hover:bg-muted/70 dark:border-white/12 dark:bg-white/[0.04] dark:hover:bg-white/[0.08]`;
+
 export function ScanDialog({
   ref,
   open,
@@ -92,22 +99,24 @@ export function ScanDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader className="pr-8 text-left">
-          <DialogTitle>Scan a textbook page</DialogTitle>
-          <DialogDescription>
-            Use a photo where the kanji, the reading, and the Myanmar meaning sit in rows. You can correct every line before any card is saved.
-          </DialogDescription>
+      <DialogContent className="gap-4 max-sm:p-5 max-sm:pt-12 sm:max-w-md sm:gap-5 sm:p-6 sm:pt-12">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Scan</DialogTitle>
+          <DialogDescription>Upload a textbook page photo.</DialogDescription>
         </DialogHeader>
 
         {geminiConfigured === false ? (
-          <p className="rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-6">
-            No Gemini API key is set on this server. The next step opens a practice page in the same shape as a scanned list.
+          <p className="rounded-xl border border-primary/25 bg-primary/10 px-3.5 py-2.5 text-sm leading-5">
+            No API key set — a practice page will open instead.
           </p>
         ) : null}
 
         <div
-          className={`rounded-3xl border border-dashed px-4 py-6 text-center transition-colors ${dragging ? "border-primary bg-primary/10" : "border-border bg-muted/30"}`}
+          className={`rounded-2xl border border-dashed px-5 py-9 text-center transition-colors duration-200 ${
+            dragging
+              ? "border-primary/50 bg-primary/[0.08]"
+              : "border-border/70 bg-muted/20 hover:border-primary/30 hover:bg-muted/30 dark:border-white/12 dark:bg-white/[0.03] dark:hover:bg-white/[0.05]"
+          }`}
           onDragOver={(event) => {
             event.preventDefault();
             setDragging(true);
@@ -122,29 +131,46 @@ export function ScanDialog({
           {preview ? (
             // Local preview of a photo the user just chose.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="Selected textbook page" className="mx-auto max-h-56 rounded-2xl object-contain" />
+            <img
+              src={preview}
+              alt="Selected textbook page"
+              className="mx-auto max-h-48 rounded-xl object-contain"
+            />
           ) : (
-            <div className="mx-auto grid size-12 place-items-center rounded-full bg-card text-primary">
-              <ImagePlus />
+            <div className="mx-auto grid size-12 place-items-center rounded-xl border border-border/60 bg-card text-primary dark:border-white/10 dark:bg-white/[0.04]">
+              <ImagePlus className="size-5" />
             </div>
           )}
-          <p className="mt-3 text-sm font-medium">{reading ? "Reading the page…" : "Drop a photo here"}</p>
-          <p className="mt-1 text-xs text-muted-foreground">JPEG, PNG, or WebP</p>
+          <p className="mt-3.5 text-sm font-medium tracking-tight">
+            {reading ? "Reading…" : "Drop a photo here"}
+          </p>
           {reading ? <Loader2 className="mx-auto mt-3 size-4 animate-spin text-muted-foreground" /> : null}
         </div>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="rounded-full" disabled={reading} onClick={() => fileRef.current?.click()}>
+        <div className="grid grid-cols-1 gap-2.5 min-[380px]:grid-cols-2">
+          <Button
+            type="button"
+            variant="outline"
+            className={actionSecondary}
+            disabled={reading}
+            onClick={() => fileRef.current?.click()}
+          >
             <ImagePlus />
             Choose photo
           </Button>
-          <Button type="button" className="rounded-full" disabled={reading} onClick={() => cameraRef.current?.click()}>
+          <Button
+            type="button"
+            className={actionPrimary}
+            disabled={reading}
+            onClick={() => cameraRef.current?.click()}
+          >
             <Camera />
             Use camera
           </Button>
         </div>
+
         <input
           ref={fileRef}
           type="file"

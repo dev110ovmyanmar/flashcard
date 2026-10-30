@@ -1,17 +1,22 @@
-import { geminiModelChain, shouldTryNextModel } from "@/lib/gemini-ocr";
 import {
-  buildJlptGeminiRequest,
-  geminiErrorMessage,
-  nextGeminiAttempt,
+  callJlptGenerateContent,
+  cleanImageBase64,
+  isGeminiAuthError,
+  isGeminiBillingError,
+  isNetworkOrTimeoutError,
+  isStructuredOutputError,
+  jlptGeminiModelChain,
+  normalizeImageMimeType,
   questionsFromGemini,
-  type GeminiAttempt,
+  shouldTryNextJlptModel,
 } from "@/lib/gemini-jlpt";
 import type { JlptQuestion } from "@/src/constants/jlptPrompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MAX_BASE64_CHARS = 6_000_000;
+/** Reject oversized uploads; client compresses JLPT photos well under this. */
+const MAX_BASE64_CHARS = 1_200_000;
 
 export type JlptAnalyzeSuccess = {
   ok: true;
@@ -36,24 +41,8 @@ function json(body: JlptAnalyzeSuccess | JlptAnalyzeFailure | { configured: bool
   return Response.json(body, { status });
 }
 
-function cleanBase64(input: string): string {
-  const marker = "base64,";
-  const index = input.indexOf(marker);
-  return (index >= 0 ? input.slice(index + marker.length) : input).replace(/\s/g, "");
-}
-
 function safeMessage(message: string): string {
-  return message.replace(/key=[^&\s]+/gi, "key=…").slice(0, 240);
-}
-
-async function readGeminiBody(response: Response): Promise<unknown> {
-  const raw = await response.text();
-  if (!raw.trim()) return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return raw;
-  }
+  return message.replace(/key=[^&\s]+/gi, "key=…").slice(0, 400);
 }
 
 async function readImageFromRequest(request: Request): Promise<
@@ -83,7 +72,11 @@ async function readImageFromRequest(request: Request): Promise<
     if (imageBase64.length > MAX_BASE64_CHARS) {
       return { ok: false, error: "That photo is too large. Try a closer crop.", status: 413 };
     }
-    return { ok: true, imageBase64, mimeType: file.type || "image/jpeg" };
+    return {
+      ok: true,
+      imageBase64,
+      mimeType: normalizeImageMimeType(file.type || "image/jpeg"),
+    };
   }
 
   let body: unknown;
@@ -102,12 +95,14 @@ async function readImageFromRequest(request: Request): Promise<
     return { ok: false, error: "Choose a photo first.", status: 400 };
   }
 
-  const mimeType = typeof record.mimeType === "string" ? record.mimeType : "image/jpeg";
+  const mimeType = normalizeImageMimeType(
+    typeof record.mimeType === "string" ? record.mimeType : "image/jpeg",
+  );
   if (!mimeType.startsWith("image/")) {
     return { ok: false, error: "That file isn't an image.", status: 415 };
   }
 
-  const imageBase64 = cleanBase64(record.imageBase64);
+  const imageBase64 = cleanImageBase64(record.imageBase64);
   if (!/^[A-Za-z0-9+/]+=*$/.test(imageBase64)) {
     return { ok: false, error: "The photo data was unreadable.", status: 400 };
   }
@@ -130,6 +125,7 @@ export async function POST(request: Request) {
 
   const key = geminiKey();
   if (!key) {
+    console.error("[Gemini JLPT] missing API key — set GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY");
     return json(
       {
         ok: false,
@@ -139,102 +135,85 @@ export async function POST(request: Request) {
     );
   }
 
-  const models = geminiModelChain(process.env.GEMINI_MODEL);
+  console.info("[Gemini JLPT] API key loaded", { length: key.length, prefix: `${key.slice(0, 4)}…` });
+
+  const models = jlptGeminiModelChain(process.env.GEMINI_MODEL || process.env.JLPT_GEMINI_MODEL);
   let lastMessage = "Gemini did not respond. Check the key and try the photo again.";
 
-  for (const model of models) {
-    let attempt: GeminiAttempt | "next-model" = { thinking: true, structured: true };
-    for (let tryIndex = 0; tryIndex < 3 && attempt !== "next-model"; tryIndex += 1) {
-      const current = attempt;
-      try {
-        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-goog-api-key": key,
-          },
-          body: JSON.stringify(
-            buildJlptGeminiRequest(image.imageBase64, image.mimeType, model, {
-              thinking: current.thinking,
-              structured: current.structured,
-            }),
-          ),
-          signal: AbortSignal.timeout(45_000),
+  for (const modelName of models) {
+    for (const structured of [true, false]) {
+      const result = await callJlptGenerateContent({
+        apiKey: key,
+        model: modelName,
+        imageBase64: image.imageBase64,
+        mimeType: image.mimeType,
+        structured,
+      });
+
+      if (!result.ok) {
+        lastMessage = result.error;
+        console.error("[Gemini JLPT] attempt failed", {
+          model: modelName,
+          structured,
+          kind: result.kind,
+          message: safeMessage(result.error),
         });
 
-        const payload = await readGeminiBody(response);
-        if (!response.ok) {
-          const message = geminiErrorMessage(payload, response.status);
-          console.error("Gemini JLPT analyze failed", model, safeMessage(message));
-          lastMessage = message;
-          const next = nextGeminiAttempt(response.status, message, current);
-          if (next === "auth") {
-            return json(
-              {
-                ok: false,
-                error:
-                  "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
-              },
-              502,
-            );
-          }
-          if (next === "billing") {
-            return json(
-              {
-                ok: false,
-                error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
-              },
-              502,
-            );
-          }
-          if (next === "stop") {
-            return json({ ok: false, error: `Gemini could not analyze the paper. ${safeMessage(message)}` }, 502);
-          }
-          attempt = next;
+        if (result.kind === "auth" || isGeminiAuthError(result.error)) {
+          return json(
+            {
+              ok: false,
+              error:
+                "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
+            },
+            502,
+          );
+        }
+        if (result.kind === "billing" || isGeminiBillingError(result.error)) {
+          return json(
+            {
+              ok: false,
+              error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
+            },
+            502,
+          );
+        }
+        if (result.kind === "timeout" || result.kind === "network" || isNetworkOrTimeoutError(result.error)) {
+          // Try the next model once network recovers / alternate endpoint path.
+          break;
+        }
+        if (structured && (result.kind === "parse" || isStructuredOutputError(result.error))) {
           continue;
         }
-
-        const parsed = questionsFromGemini(payload);
-        if (parsed.error && parsed.questions.length === 0) {
-          console.error("Gemini JLPT analyze failed", model, safeMessage(parsed.error));
-          lastMessage = parsed.error;
-          const next = nextGeminiAttempt(response.status, parsed.error, current);
-          if (next === "auth" || next === "billing" || next === "stop") {
-            return json(
-              { ok: false, error: `Gemini could not analyze the paper. ${safeMessage(parsed.error)}` },
-              502,
-            );
-          }
-          attempt = next;
-          continue;
+        if (shouldTryNextJlptModel(result.error)) {
+          break;
         }
-
-        const success: JlptAnalyzeSuccess = {
-          ok: true,
-          source: "gemini",
-          message: parsed.questions.length
-            ? `Extracted ${parsed.questions.length} Mondai 4–6 question${parsed.questions.length === 1 ? "" : "s"}.`
-            : "The photo was read, but no Mondai 4–6 questions were found.",
-          questions: parsed.questions,
-          rawText: parsed.rawText,
-        };
-        return json(success);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "The request failed.";
-        console.error("Gemini JLPT analyze failed", model, safeMessage(message));
-        lastMessage = message;
-        break;
+        return json({ ok: false, error: `Gemini could not analyze the paper. ${safeMessage(result.error)}` }, 502);
       }
+
+      const parsed = questionsFromGemini(result.payload);
+      const success: JlptAnalyzeSuccess = {
+        ok: true,
+        source: "gemini",
+        message: parsed.questions.length
+          ? `Extracted ${parsed.questions.length} Mondai 4–6 question${parsed.questions.length === 1 ? "" : "s"}.`
+          : "The photo was read, but no Mondai 4–6 questions were found.",
+        questions: parsed.questions,
+        rawText: parsed.rawText || result.rawText,
+      };
+      return json(success);
     }
   }
 
-  const busy = shouldTryNextModel(503, lastMessage);
+  const networkish = isNetworkOrTimeoutError(lastMessage);
   return json(
     {
       ok: false,
-      error: busy
-        ? "Gemini is busy right now. Try the photo again in a moment."
-        : `Gemini could not analyze the paper. ${safeMessage(lastMessage)}`,
+      error: networkish
+        ? safeMessage(lastMessage)
+        : shouldTryNextJlptModel(lastMessage)
+          ? "Gemini is busy right now. Try the photo again in a moment."
+          : `Gemini could not analyze the paper. ${safeMessage(lastMessage)}`,
     },
     503,
   );

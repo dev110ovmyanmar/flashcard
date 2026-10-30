@@ -24,6 +24,7 @@ export function formatUpdated(ts: number, now = Date.now()): string {
 export function sourceLabel(deck: Deck): string {
   if (deck.source === "sample") return "Sample";
   if (deck.source === "manual") return "Typed";
+  if (deck.source === "jlpt") return "Goi";
   if (deck.scanMode === "mock") return "Practice scan";
   return "Scanned";
 }

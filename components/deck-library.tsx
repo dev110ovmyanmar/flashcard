@@ -1,8 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ImagePlus, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { BookOpenText, Download, ImagePlus, Layers, Pencil, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,10 +15,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { downloadGoiBackup, readBackupFile } from "@/lib/backup";
 import { cardFace, deckStats } from "@/lib/decks";
 import { formatUpdated, sourceLabel } from "@/lib/format";
-import { SAMPLE_DECK_ID } from "@/lib/sample-data";
-import type { Deck } from "@/lib/types";
+import type { Deck, PersistedState } from "@/lib/types";
+
+const primaryBtn =
+  "inline-flex h-10 w-auto shrink-0 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold whitespace-nowrap transition-all duration-200 border border-primary/20 bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-sm active:scale-[0.98] [&_svg:not([class*='size-'])]:size-4";
+
+const toolbarBtn =
+  "inline-flex h-9 w-auto shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium whitespace-nowrap transition-all duration-200 border border-border/70 bg-card/80 text-muted-foreground shadow-xs hover:border-border hover:bg-muted/50 hover:text-foreground active:scale-[0.98] dark:bg-card/40 [&_svg:not([class*='size-'])]:size-3.5";
+
+const toolbarIconBtn =
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card/80 text-muted-foreground shadow-xs transition-all duration-200 hover:border-border hover:bg-muted/50 hover:text-foreground active:scale-[0.98] dark:bg-card/40 [&_svg:not([class*='size-'])]:size-3.5";
 
 export function DeckLibrary({
   decks,
@@ -27,7 +38,7 @@ export function DeckLibrary({
   onStudy,
   onEdit,
   onDelete,
-  onRestoreSample,
+  onImportBackup,
 }: {
   decks: Deck[];
   geminiConfigured: boolean | null;
@@ -37,42 +48,98 @@ export function DeckLibrary({
   onStudy: (id: string) => void;
   onEdit: (deck: Deck) => void;
   onDelete: (id: string) => void;
-  onRestoreSample: () => void;
+  onImportBackup: (state: PersistedState) => void;
 }) {
+  const importRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Deck | null>(null);
+  const [pendingImport, setPendingImport] = useState<PersistedState | null>(null);
   const ordered = [...decks].sort((a, b) => b.updatedAt - a.updatedAt);
-  const hasSample = decks.some((deck) => deck.id === SAMPLE_DECK_ID);
+
+  function exportBackup() {
+    try {
+      downloadGoiBackup();
+      toast.success("Goi backup downloaded");
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Couldn't export the backup.");
+    }
+  }
+
+  async function handleImportFile(file: File | null) {
+    if (!file) return;
+    try {
+      const state = await readBackupFile(file);
+      setPendingImport(state);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Couldn't read that backup.");
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-12">
-      <section className="grid items-stretch gap-5 lg:grid-cols-[1.15fr_0.85fr] lg:gap-6">
-        <div className="flex flex-col justify-center">
-          <p className="text-[11px] tracking-[0.18em] text-primary uppercase">Vocabulary desk</p>
-          <h1 className="mt-2 max-w-xl text-[2rem] leading-[1.08] font-semibold tracking-tight sm:mt-3 sm:text-5xl sm:leading-[1.05]">
-            A textbook page, turned into cards you can flip.
-          </h1>
-          <p className="mt-3 max-w-xl text-[15px] leading-6 text-muted-foreground sm:mt-4 sm:text-base sm:leading-7">
-            Photograph a Japanese list — kanji, hiragana, and the Myanmar meaning. Check the reading, then study with the card face-down until the word stays.
-          </p>
-          <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6 sm:flex sm:flex-wrap sm:gap-3">
-            <Button type="button" className="h-12 rounded-full px-4 sm:h-11 sm:px-5" onClick={onScan}>
-              <ImagePlus />
-              Scan a page
-            </Button>
-            <Button type="button" variant="outline" className="h-12 rounded-full bg-card/70 px-4 sm:h-11 sm:px-5" onClick={onType}>
+      <section className="flex flex-col gap-6 sm:gap-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+          <Button type="button" className={primaryBtn} onClick={onScan}>
+            <ImagePlus />
+            Scan a page
+          </Button>
+
+          <div
+            role="toolbar"
+            aria-label="Desk actions"
+            className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border/60 bg-muted/25 p-1.5 dark:bg-muted/15"
+          >
+            <Button type="button" variant="ghost" className={toolbarBtn} onClick={onType}>
               <Plus />
               Type a deck
             </Button>
+            <Link href="/jlpt-analyzer" className={toolbarBtn}>
+              <Sparkles />
+              Vocabulary analyzer
+            </Link>
+            <Link href="/grammar-analyzer" className={toolbarBtn}>
+              <BookOpenText />
+              Grammar analyzer
+            </Link>
+            <span className="mx-0.5 hidden h-5 w-px bg-border/80 sm:block" aria-hidden />
+            <Button
+              type="button"
+              variant="ghost"
+              className={toolbarIconBtn}
+              aria-label="Export JSON backup"
+              title="Export JSON"
+              onClick={exportBackup}
+            >
+              <Download />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className={toolbarIconBtn}
+              aria-label="Import JSON backup"
+              title="Import JSON"
+              onClick={() => importRef.current?.click()}
+            >
+              <Upload />
+            </Button>
+            <input
+              ref={importRef}
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={(event) => {
+                void handleImportFile(event.target.files?.[0] ?? null);
+                event.target.value = "";
+              }}
+            />
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">
-            {geminiConfigured === null
-              ? "Checking the reader…"
-              : geminiConfigured
-                ? "Gemini is connected and will read the photo."
-                : "Practice mode: scans open an editable N2 page until a Gemini API key is added."}
-          </p>
         </div>
+
+        {geminiConfigured === false ? (
+          <p className="-mt-2 text-xs text-muted-foreground sm:-mt-4">
+            Add <code className="text-[11px]">GEMINI_API_KEY</code> to enable photo reading.
+          </p>
+        ) : null}
 
         <button
           type="button"
@@ -88,61 +155,51 @@ export function DeckLibrary({
             const file = event.dataTransfer.files?.[0];
             if (file) onFile(file);
           }}
-          className={`glass hidden cursor-pointer rounded-[1.75rem] p-5 text-left transition-colors lg:block ${dragging ? "border-primary" : ""}`}
+          className={[
+            "group w-full rounded-xl border border-dashed px-5 py-12 text-center transition-all duration-200 sm:px-8 sm:py-14",
+            dragging
+              ? "border-primary/50 bg-primary/[0.08] shadow-xs"
+              : "border-border/70 bg-muted/15 hover:border-primary/35 hover:bg-muted/30",
+          ].join(" ")}
         >
-          <div className="rounded-2xl border border-border/80 bg-paper px-4 py-4">
-            <div className="grid grid-cols-[1.1fr_1fr_1.2fr] gap-2 text-[10px] tracking-[0.14em] text-muted-foreground uppercase">
-              <span>Kanji</span>
-              <span>Reading</span>
-              <span>Myanmar</span>
-            </div>
-            <div className="mt-3 space-y-3">
-              <Specimen kanji="経験" reading="けいけん" meaning="အတွေ့အကြုံ" />
-              <Specimen kanji="経済" reading="けいざい" meaning="စီးပွားရေး" />
-              <Specimen kanji="環境" reading="かんきょう" meaning="ပတ်ဝန်းကျင်" />
-            </div>
+          <div
+            className={[
+              "mx-auto grid size-14 place-items-center rounded-xl border bg-card text-primary shadow-xs transition-colors duration-200",
+              dragging ? "border-primary/30" : "border-border/60 group-hover:border-primary/25",
+            ].join(" ")}
+          >
+            <ImagePlus className="size-5" />
           </div>
-          <p className="mt-4 text-sm font-medium">Drop a textbook photo here</p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Rows like these become cards. The front shows the kanji, or the hiragana when a word has none.
-          </p>
-        </button>
-
-        <button
-          type="button"
-          onClick={onScan}
-          className="card-wash rounded-[1.75rem] border border-border px-4 py-7 text-center shadow-[0_18px_40px_-24px_color-mix(in_oklab,var(--foreground)_35%,transparent)] lg:hidden"
-        >
-          <p className="text-[10px] tracking-[0.16em] text-muted-foreground uppercase">Front of the card</p>
-          <p lang="ja" className="mt-2 font-serif text-6xl leading-none tracking-tight">
-            経験
-          </p>
-          <p className="mt-3 text-sm text-muted-foreground">Photograph a page like this</p>
+          <p className="mt-4 text-sm font-semibold tracking-tight text-foreground">Drop a photo here</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">or tap to choose an image</p>
         </button>
       </section>
 
-      <section className="mt-8 lg:mt-12">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">On your desk</h2>
-            <p className="text-sm text-muted-foreground">Decks stay in this browser.</p>
-          </div>
-        </div>
-
+      <section className="mt-10 sm:mt-12">
         {ordered.length === 0 ? (
-          <div className="mt-4 rounded-[1.75rem] border border-dashed border-border px-6 py-12 text-center">
-            <p className="text-base font-medium">Your desk is clear.</p>
+          <div className="rounded-xl border border-border/70 bg-card/60 px-6 py-14 text-center shadow-xs sm:px-10 sm:py-16">
+            <div className="mx-auto grid size-14 place-items-center rounded-xl border border-border/60 bg-muted/30 text-muted-foreground">
+              <Layers className="size-5" />
+            </div>
+            <h2 className="mt-5 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+              No decks yet
+            </h2>
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-              Scan a page or type a few words. The N2 sample can come back if you want a deck to practice on.
+              Start with a scanned page or type a few words. Your Goi stays on this device until you export a backup.
             </p>
-            {!hasSample ? (
-              <Button type="button" variant="outline" className="mt-5 rounded-full" onClick={onRestoreSample}>
-                Put the N2 sample back
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              <Button type="button" className={primaryBtn} onClick={onScan}>
+                <ImagePlus />
+                Create
               </Button>
-            ) : null}
+              <Button type="button" variant="ghost" className={toolbarBtn} onClick={onType}>
+                <Plus />
+                Type instead
+              </Button>
+            </div>
           </div>
         ) : (
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+          <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4">
             {ordered.map((deck, index) => {
               const stats = deckStats(deck);
               const lead = (deck.cards[0] ? cardFace(deck.cards[0]) : "") || "文";
@@ -152,10 +209,13 @@ export function DeckLibrary({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: Math.min(index, 8) * 0.04, type: "spring", stiffness: 260, damping: 26 }}
-                  className="glass flex flex-col rounded-[1.5rem] p-4"
+                  className="flex flex-col rounded-xl border border-border/70 bg-card p-4 shadow-xs ring-1 ring-black/[0.02] dark:ring-white/[0.03]"
                 >
                   <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => onStudy(deck.id)}>
-                    <span lang="ja" className="grid size-14 shrink-0 place-items-center rounded-2xl bg-paper font-serif text-2xl">
+                    <span
+                      lang="ja"
+                      className="grid size-14 shrink-0 place-items-center rounded-xl bg-muted/40 font-serif text-2xl"
+                    >
                       {Array.from(lead).slice(0, 2).join("")}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -178,13 +238,30 @@ export function DeckLibrary({
                   <div className="mt-4 flex items-center justify-between gap-2">
                     <p className="min-w-0 truncate text-xs text-muted-foreground">{formatUpdated(deck.updatedAt)}</p>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Edit ${deck.name}`} onClick={() => onEdit(deck)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${deck.name}`}
+                        onClick={() => onEdit(deck)}
+                      >
                         <Pencil />
                       </Button>
-                      <Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${deck.name}`} onClick={() => setPendingDelete(deck)}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Delete ${deck.name}`}
+                        onClick={() => setPendingDelete(deck)}
+                      >
                         <Trash2 />
                       </Button>
-                      <Button type="button" size="sm" className="h-10 rounded-full px-4 sm:h-8" onClick={() => onStudy(deck.id)}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 rounded-xl px-4 sm:h-8"
+                        onClick={() => onStudy(deck.id)}
+                      >
                         Study
                       </Button>
                     </div>
@@ -205,13 +282,13 @@ export function DeckLibrary({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" className="rounded-full" onClick={() => setPendingDelete(null)}>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={() => setPendingDelete(null)}>
               Keep it
             </Button>
             <Button
               type="button"
               variant="destructive"
-              className="rounded-full"
+              className="rounded-xl"
               onClick={() => {
                 if (pendingDelete) onDelete(pendingDelete.id);
                 setPendingDelete(null);
@@ -222,22 +299,36 @@ export function DeckLibrary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
 
-function Specimen({ kanji, reading, meaning }: { kanji: string; reading: string; meaning: string }) {
-  return (
-    <div className="grid grid-cols-[1.1fr_1fr_1.2fr] items-baseline gap-2 border-t border-border/70 pt-3">
-      <span lang="ja" className="font-serif text-xl">
-        {kanji}
-      </span>
-      <span lang="ja" className="font-serif text-sm text-muted-foreground">
-        {reading}
-      </span>
-      <span lang="my" className="font-myanmar text-sm leading-6">
-        {meaning}
-      </span>
+      <Dialog open={Boolean(pendingImport)} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <DialogContent>
+          <DialogHeader className="text-left">
+            <DialogTitle>Restore Goi backup?</DialogTitle>
+            <DialogDescription>
+              This replaces all decks currently saved in this browser with{" "}
+              {pendingImport ? pendingImport.decks.length : 0} deck
+              {pendingImport?.decks.length === 1 ? "" : "s"} from the JSON file.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={() => setPendingImport(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl"
+              onClick={() => {
+                if (!pendingImport) return;
+                onImportBackup(pendingImport);
+                setPendingImport(null);
+                toast.success("Goi backup restored");
+              }}
+            >
+              Replace & restore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -14,7 +14,6 @@ import { useDecks } from "@/hooks/use-decks";
 import { fetchOcrStatus } from "@/lib/client-ocr";
 import { blankRows, createDeck, mergeDeck, withIds } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
-import { createSampleDeck } from "@/lib/sample-data";
 import type { Card, DeckSource, OcrSuccess, ScanMode, VocabRow } from "@/lib/types";
 
 type ReviewState = {
@@ -23,7 +22,6 @@ type ReviewState = {
   name: string;
   rows: VocabRow[];
   banner?: string;
-  rawText?: string;
   source: DeckSource;
   scanMode?: ScanMode;
 };
@@ -32,7 +30,18 @@ export function SumiApp() {
   const router = useRouter();
   const search = useSearchParams();
   const deckId = search.get("deck");
-  const { decks, ready, corrupt, addDeck, saveDeck, deleteDeck, gradeCard, restoreCard, startFresh } = useDecks();
+  const {
+    decks,
+    ready,
+    corrupt,
+    addDeck,
+    saveDeck,
+    deleteDeck,
+    gradeCard,
+    restoreCard,
+    startFresh,
+    replaceDecks,
+  } = useDecks();
   const [scanOpen, setScanOpen] = useState(false);
   const scanRef = useRef<ScanDialogHandle>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
@@ -99,7 +108,6 @@ export function SumiApp() {
       name: datedDeckName(result.source === "mock" ? "Practice page" : "Scanned page"),
       rows,
       banner: result.message,
-      rawText: result.rawText,
       source: "scan",
       scanMode: result.source,
     });
@@ -176,11 +184,7 @@ export function SumiApp() {
           onStudy={openStudy}
           onEdit={(deck) => openEdit(deck.id)}
           onDelete={deleteDeck}
-          onRestoreSample={() => {
-            const sample = createSampleDeck();
-            addDeck(sample);
-            toast.success("N2 core is back on your desk");
-          }}
+          onImportBackup={(state) => replaceDecks(state.decks)}
         />
       )}
 
@@ -202,7 +206,6 @@ export function SumiApp() {
             : "Nothing is saved until you keep this list."
         }
         banner={review?.banner}
-        rawText={review?.rawText}
         initialName={review?.name ?? ""}
         initialRows={review?.rows ?? []}
         editing={review?.mode === "edit"}

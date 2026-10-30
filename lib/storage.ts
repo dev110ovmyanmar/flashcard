@@ -9,7 +9,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asSource(value: unknown): DeckSource {
-  if (value === "sample" || value === "scan" || value === "manual") return value;
+  if (value === "sample" || value === "scan" || value === "manual" || value === "jlpt") return value;
   return "manual";
 }
 
@@ -58,6 +58,15 @@ function sanitizeDeck(value: unknown): Deck | null {
   };
 }
 
+export function sanitizePersistedState(value: unknown): PersistedState | null {
+  if (!isRecord(value) || !Array.isArray(value.decks)) return null;
+  return {
+    version: 1,
+    seeded: Boolean(value.seeded),
+    decks: value.decks.map(sanitizeDeck).filter((deck): deck is Deck => deck !== null),
+  };
+}
+
 export function loadState(): LoadedState {
   if (typeof window === "undefined") {
     return { version: 1, seeded: false, decks: [], corrupt: false };
@@ -66,15 +75,9 @@ export function loadState(): LoadedState {
   if (!raw) return { version: 1, seeded: false, decks: [], corrupt: false };
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || !Array.isArray(parsed.decks)) {
-      return { version: 1, seeded: false, decks: [], corrupt: true };
-    }
-    return {
-      version: 1,
-      seeded: Boolean(parsed.seeded),
-      decks: parsed.decks.map(sanitizeDeck).filter((deck): deck is Deck => deck !== null),
-      corrupt: false,
-    };
+    const state = sanitizePersistedState(parsed);
+    if (!state) return { version: 1, seeded: false, decks: [], corrupt: true };
+    return { ...state, corrupt: false };
   } catch {
     return { version: 1, seeded: false, decks: [], corrupt: true };
   }
