@@ -1,7 +1,8 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { useId, useState } from "react";
+import { FuriganaSentence, FuriganaText } from "@/components/furigana-text";
 import { Badge } from "@/components/ui/badge";
 import type { JlptOptionRow, JlptQuestion } from "@/src/constants/jlptPrompt";
 
@@ -66,7 +67,7 @@ function MobileOptionCard({
           correct ? "font-semibold text-emerald-950 dark:text-emerald-50" : "font-medium text-foreground",
         ].join(" ")}
       >
-        {row.japanese || "—"}
+        <FuriganaText text={row.japanese || "—"} reading={row.reading} />
       </p>
       <p
         lang="my"
@@ -79,14 +80,73 @@ function MobileOptionCard({
       >
         {row.meaning_burmese || "—"}
       </p>
+      {row.usage_burmese ? (
+        <p lang="my" className="mt-1.5 font-myanmar text-[13px] leading-6 break-words text-muted-foreground/90">
+          {row.usage_burmese}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function DistractorCard({ row }: { row: JlptOptionRow }) {
+  return (
+    <section className="rounded-lg border border-rose-500/20 bg-rose-500/[0.05] px-3 py-3 dark:border-rose-400/15 dark:bg-rose-400/[0.06] sm:px-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-md border border-rose-300/70 bg-rose-100/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/15 dark:text-rose-200">
+          <X className="size-2.5" aria-hidden />
+          誤答 {row.option || "—"}
+        </span>
+        <span className="font-serif text-base font-medium tracking-tight text-foreground">
+          <FuriganaText text={row.japanese || "—"} reading={row.reading} />
+        </span>
+      </div>
+      <dl className="mt-2.5 space-y-2">
+        <div>
+          <dt className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+            Meaning
+          </dt>
+          <dd lang="my" className="mt-0.5 font-myanmar text-[14px] leading-6 break-words text-muted-foreground">
+            {row.meaning_burmese || "—"}
+          </dd>
+        </div>
+        {row.usage_burmese ? (
+          <div>
+            <dt className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+              Usage & context
+            </dt>
+            <dd lang="my" className="mt-0.5 font-myanmar text-[14px] leading-6 break-words text-muted-foreground">
+              {row.usage_burmese}
+            </dd>
+          </div>
+        ) : null}
+        {row.why_wrong_burmese ? (
+          <div>
+            <dt className="text-[10px] font-semibold tracking-[0.14em] text-rose-700 uppercase dark:text-rose-300">
+              Why it doesn&apos;t fit
+            </dt>
+            <dd lang="my" className="mt-0.5 font-myanmar text-[14px] leading-6 break-words text-muted-foreground">
+              {row.why_wrong_burmese}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
   );
 }
 
 export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const panelId = useId();
-  const hasDetails = Boolean(question.explanation_burmese || question.nuance_note);
+  const distractors = question.options_table.filter(
+    (row) => !isCorrectOption(row.option, question.correct_option),
+  );
+  const hasDistractorDetail = distractors.some(
+    (row) => row.usage_burmese || row.why_wrong_burmese || row.meaning_burmese,
+  );
+  const hasDetails = Boolean(
+    question.explanation_burmese || question.nuance_note || hasDistractorDetail,
+  );
 
   return (
     <article className="w-full overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs ring-1 ring-black/[0.03] dark:border-border/50 dark:ring-white/[0.04]">
@@ -109,16 +169,22 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
           ) : null}
         </div>
 
-        <p className="mt-3 font-serif text-[1.05rem] leading-[1.55] tracking-tight break-words text-foreground sm:mt-3.5 sm:text-xl sm:leading-[1.5]">
-          {question.japanese_sentence || "—"}
-        </p>
+        <FuriganaSentence
+          text={question.japanese_sentence || "—"}
+          tokens={question.furigana_tokens}
+          targetWord={question.target_word}
+          targetReading={question.reading}
+          className="mt-3 block font-serif text-[1.05rem] leading-[1.7] tracking-tight break-words text-foreground sm:mt-3.5 sm:text-xl sm:leading-[1.65]"
+        />
 
         {(question.target_word || question.reading) && (
           <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
             {question.target_word ? (
-              <span className="font-medium break-words text-foreground/85">{question.target_word}</span>
+              <span className="font-medium break-words text-foreground/85">
+                <FuriganaText text={question.target_word} reading={question.reading} />
+              </span>
             ) : null}
-            {question.reading ? (
+            {question.reading && !question.target_word ? (
               <span className="tracking-[0.06em] break-words text-muted-foreground">{question.reading}</span>
             ) : null}
           </p>
@@ -190,7 +256,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                                   : "font-medium text-foreground",
                               ].join(" ")}
                             >
-                              {row.japanese || "—"}
+                              <FuriganaText text={row.japanese || "—"} reading={row.reading} />
                             </span>
                             {correct ? <CorrectBadge /> : null}
                           </div>
@@ -204,7 +270,10 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                               : "text-muted-foreground",
                           ].join(" ")}
                         >
-                          {row.meaning_burmese || "—"}
+                          <span className="block">{row.meaning_burmese || "—"}</span>
+                          {row.usage_burmese ? (
+                            <span className="mt-1 block text-[13px] leading-6 opacity-85">{row.usage_burmese}</span>
+                          ) : null}
                         </td>
                       </tr>
                     );
@@ -233,10 +302,10 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
             >
               <span className="min-w-0">
                 <span className="block text-sm font-semibold tracking-tight text-foreground">
-                  Explanation & Nuance
+                  Explanation & Distractors
                 </span>
                 <span lang="my" className="mt-0.5 block font-myanmar text-xs leading-5 text-muted-foreground">
-                  အသေးစိတ် ရှင်းလင်းချက်
+                  အသေးစိတ် ရှင်းလင်းချက် နှင့် မှားသော ရွေးချယ်မှုများ
                 </span>
               </span>
               <span
@@ -275,6 +344,21 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                       <p lang="my" className="mt-2 font-myanmar text-[15px] leading-7 break-words text-muted-foreground">
                         {question.nuance_note}
                       </p>
+                    </section>
+                  ) : null}
+                  {hasDistractorDetail ? (
+                    <section className="space-y-2.5">
+                      <h3 className="text-[10px] font-semibold tracking-[0.16em] text-rose-700 uppercase dark:text-rose-300">
+                        Wrong options
+                      </h3>
+                      <div className="grid gap-2.5">
+                        {distractors.map((row) => (
+                          <DistractorCard
+                            key={`d-${question.mondai_type}-${question.question_number}-${row.option}-${row.japanese}`}
+                            row={row}
+                          />
+                        ))}
+                      </div>
                     </section>
                   ) : null}
                 </div>

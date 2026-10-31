@@ -19,14 +19,47 @@ const SAMPLE = {
       mondai_type: 5,
       question_number: 12,
       japanese_sentence: "その計画は_____に終わった。",
+      furigana_tokens: [
+        { surface: "その", reading: "" },
+        { surface: "計画", reading: "けいかく" },
+        { surface: "は_____に終わった。", reading: "" },
+      ],
       target_word: "失敗",
       reading: "しっぱい",
       correct_option: "3",
       options_table: [
-        { option: "1", japanese: "成功", meaning_burmese: "အောင်မြင်ခြင်း" },
-        { option: "2", japanese: "完成", meaning_burmese: "ပြီးဆုံးခြင်း" },
-        { option: "3", japanese: "失敗", meaning_burmese: "မအောင်မြင်ခြင်း" },
-        { option: "4", japanese: "継続", meaning_burmese: "ဆက်လက်လုပ်ခြင်း" },
+        {
+          option: "1",
+          japanese: "成功",
+          reading: "せいこう",
+          meaning_burmese: "အောင်မြင်ခြင်း",
+          usage_burmese: "အောင်မြင်သည်ဟု သုံး",
+          why_wrong_burmese: "ဆန့်ကျင်ဘက်",
+        },
+        {
+          option: "2",
+          japanese: "完成",
+          reading: "かんせい",
+          meaning_burmese: "ပြီးဆုံးခြင်း",
+          usage_burmese: "ပြီးသည်ဟု သုံး",
+          why_wrong_burmese: "မကိုက်ညီ",
+        },
+        {
+          option: "3",
+          japanese: "失敗",
+          reading: "しっぱい",
+          meaning_burmese: "မအောင်မြင်ခြင်း",
+          usage_burmese: "မအောင်မြင်ဟု သုံး",
+          why_wrong_burmese: "",
+        },
+        {
+          option: "4",
+          japanese: "継続",
+          reading: "けいぞく",
+          meaning_burmese: "ဆက်လက်လုပ်ခြင်း",
+          usage_burmese: "ဆက်လုပ်သည်ဟု သုံး",
+          why_wrong_burmese: "မကိုက်ညီ",
+        },
       ],
       explanation_burmese: "ဝါကျအရ အစီအစဉ် မအောင်မြင်ခဲ့သည်ဟု ဆိုလိုသည်။",
       nuance_note: "成功 သည် ဆန့်ကျင်ဘက်ဖြစ်သည်။",
@@ -60,7 +93,7 @@ test("builds REST inline_data image parts with cleaned base64 and jpeg mime", ()
   assert.equal(imagePart.inline_data.data, "YWJjZA==");
   assert.equal(body.generationConfig.responseMimeType, "application/json");
   assert.equal(body.generationConfig.temperature, 0.2);
-  assert.equal(body.generationConfig.maxOutputTokens, 4096);
+  assert.equal(body.generationConfig.maxOutputTokens, 8192);
   assert.equal("thinkingConfig" in body.generationConfig, false);
   assert.deepEqual(Object.keys(body.generationConfig).sort(), [
     "maxOutputTokens",
@@ -99,7 +132,10 @@ test("reads structured JLPT questions from a generateContent candidate payload",
   assert.equal(result.questions[0]?.mondai_type, 5);
   assert.equal(result.questions[0]?.question_number, 12);
   assert.equal(result.questions[0]?.target_word, "失敗");
+  assert.equal(result.questions[0]?.furigana_tokens[1]?.reading, "けいかく");
   assert.equal(result.questions[0]?.options_table[2]?.meaning_burmese, "မအောင်မြင်ခြင်း");
+  assert.equal(result.questions[0]?.options_table[0]?.why_wrong_burmese, "ဆန့်ကျင်ဘက်");
+  assert.equal(result.questions[0]?.options_table[2]?.why_wrong_burmese, "");
 });
 
 test("parses raw JSON text returned by response.text()", () => {
@@ -108,23 +144,45 @@ test("parses raw JSON text returned by response.text()", () => {
   assert.equal(result.questions[0]?.reading, "しっぱい");
 });
 
-test("filters non Mondai 4–6 entries and sorts", () => {
+test("accepts Mondai 1–6 and sorts; drops out-of-range types", () => {
   const result = questionsFromGemini(
     JSON.stringify({
       questions: [
         { ...SAMPLE.questions[0], mondai_type: 6, question_number: 2 },
+        { ...SAMPLE.questions[0], mondai_type: 1, question_number: 3 },
         { ...SAMPLE.questions[0], mondai_type: 3, question_number: 1 },
+        { ...SAMPLE.questions[0], mondai_type: 7, question_number: 1 },
         { ...SAMPLE.questions[0], mondai_type: 4, question_number: 9 },
+        { ...SAMPLE.questions[0], mondai_type: 2, question_number: 5 },
       ],
     }),
   );
   assert.deepEqual(
     result.questions.map((q) => [q.mondai_type, q.question_number]),
     [
+      [1, 3],
+      [2, 5],
+      [3, 1],
       [4, 9],
       [6, 2],
     ],
   );
+});
+
+test("backfills option reading from question reading for the correct choice", () => {
+  const result = questionsFromGemini(
+    JSON.stringify({
+      questions: [
+        {
+          ...SAMPLE.questions[0],
+          options_table: SAMPLE.questions[0].options_table.map((row) =>
+            row.option === "3" ? { ...row, reading: "" } : row,
+          ),
+        },
+      ],
+    }),
+  );
+  assert.equal(result.questions[0]?.options_table[2]?.reading, "しっぱい");
 });
 
 test("extracts exact Gemini API error messages", () => {

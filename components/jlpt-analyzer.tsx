@@ -113,7 +113,9 @@ export function JlptAnalyzer() {
         source: "jlpt",
       });
       addDeck(deck);
-      toast.success(`Saved ${rows.length} card${rows.length === 1 ? "" : "s"} to Goi`);
+      toast.success(
+        `Saved ${rows.length} card${rows.length === 1 ? "" : "s"} to Goi (all options)`,
+      );
       router.push(`/?deck=${encodeURIComponent(deck.id)}`);
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "Couldn't save to Goi.");
@@ -277,9 +279,12 @@ export function JlptAnalyzer() {
                 onClick={saveToGoi}
               >
                 {saving ? <Loader2 className="animate-spin" /> : <BookmarkPlus />}
-                Save to Goi
+                Save all options to Goi
               </Button>
             </div>
+            <p className="text-right text-xs text-muted-foreground">
+              Saves every choice (正解 + distractors) as flashcards
+            </p>
             <div className="grid w-full gap-3 sm:gap-5">
               {questions.map((question) => (
                 <JlptQuestionCard

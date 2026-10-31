@@ -185,3 +185,13 @@
     radial-gradient(120% 80% at 0% 0%, color-mix(in oklab, var(--primary) 14%, transparent), transparent 55%),
     var(--paper);
 }
+
+/* Furigana hover: reveal ruby text on press for touch devices */
+.furigana-ruby-hover:active rt,
+.furigana-ruby-hover:focus-visible rt {
+  opacity: 1;
+}
+
+.furigana-ruby rt {
+  font-variant-east-asian: proportional-width;
+}

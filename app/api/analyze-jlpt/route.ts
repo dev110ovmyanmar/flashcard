@@ -196,8 +196,8 @@ export async function POST(request: Request) {
         ok: true,
         source: "gemini",
         message: parsed.questions.length
-          ? `Extracted ${parsed.questions.length} Mondai 4–6 question${parsed.questions.length === 1 ? "" : "s"}.`
-          : "The photo was read, but no Mondai 4–6 questions were found.",
+          ? `Extracted ${parsed.questions.length} Mondai 1–6 question${parsed.questions.length === 1 ? "" : "s"}.`
+          : "The photo was read, but no Mondai 1–6 questions were found.",
         questions: parsed.questions,
         rawText: parsed.rawText || result.rawText,
       };

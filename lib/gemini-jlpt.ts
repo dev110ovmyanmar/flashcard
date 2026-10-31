@@ -1,6 +1,7 @@
 import {
   JLPT_N2_SYSTEM_PROMPT,
   type JlptAnalyzePayload,
+  type JlptFuriganaToken,
   type JlptMondaiType,
   type JlptOptionRow,
   type JlptQuestion,
@@ -16,7 +17,7 @@ export const JLPT_GEMINI_FALLBACK_MODELS = [
   "gemini-3.5-flash",
 ] as const;
 
-const REQUEST_TIMEOUT_MS = 35_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 
 /** REST responseSchema for generateContent JSON mode. */
 const JLPT_RESPONSE_SCHEMA = {
@@ -30,6 +31,17 @@ const JLPT_RESPONSE_SCHEMA = {
           mondai_type: { type: "INTEGER" },
           question_number: { type: "INTEGER" },
           japanese_sentence: { type: "STRING" },
+          furigana_tokens: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                surface: { type: "STRING" },
+                reading: { type: "STRING" },
+              },
+              required: ["surface", "reading"],
+            },
+          },
           target_word: { type: "STRING" },
           reading: { type: "STRING" },
           correct_option: { type: "STRING" },
@@ -40,9 +52,19 @@ const JLPT_RESPONSE_SCHEMA = {
               properties: {
                 option: { type: "STRING" },
                 japanese: { type: "STRING" },
+                reading: { type: "STRING" },
                 meaning_burmese: { type: "STRING" },
+                usage_burmese: { type: "STRING" },
+                why_wrong_burmese: { type: "STRING" },
               },
-              required: ["option", "japanese", "meaning_burmese"],
+              required: [
+                "option",
+                "japanese",
+                "reading",
+                "meaning_burmese",
+                "usage_burmese",
+                "why_wrong_burmese",
+              ],
             },
           },
           explanation_burmese: { type: "STRING" },
@@ -52,6 +74,7 @@ const JLPT_RESPONSE_SCHEMA = {
           "mondai_type",
           "question_number",
           "japanese_sentence",
+          "furigana_tokens",
           "target_word",
           "reading",
           "correct_option",
@@ -142,7 +165,7 @@ export function buildJlptGenerateContentBody(
     ],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
       responseMimeType: "application/json",
       ...(structured ? { responseSchema: JLPT_RESPONSE_SCHEMA } : {}),
     },
@@ -506,6 +529,9 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
 
   const options_table = tidyOptions(value.options_table ?? value.optionsTable ?? value.options);
   const japanese_sentence = asString(value.japanese_sentence ?? value.japaneseSentence ?? value.sentence);
+  const furigana_tokens = tidyFuriganaTokens(
+    value.furigana_tokens ?? value.furiganaTokens ?? value.tokens,
+  );
   const target_word = asString(value.target_word ?? value.targetWord ?? value.target);
   const reading = asString(value.reading ?? value.furigana ?? value.yomi);
   const correct_option = asString(value.correct_option ?? value.correctOption ?? value.answer);
@@ -516,17 +542,41 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
 
   if (!japanese_sentence && !target_word && options_table.length === 0) return null;
 
+  const normalizedOptions = options_table.map((row) => {
+    const isCorrect = row.option.trim() !== "" && row.option.trim() === correct_option.trim();
+    return {
+      ...row,
+      // Prefer question-level reading for the correct option when the row omits it.
+      reading: row.reading || (isCorrect ? reading : ""),
+      why_wrong_burmese: isCorrect ? "" : row.why_wrong_burmese,
+    };
+  });
+
   return {
     mondai_type,
     question_number,
     japanese_sentence,
+    furigana_tokens,
     target_word,
     reading,
     correct_option,
-    options_table,
+    options_table: normalizedOptions,
     explanation_burmese,
     nuance_note,
   };
+}
+
+function tidyFuriganaTokens(value: unknown): JlptFuriganaToken[] {
+  if (!Array.isArray(value)) return [];
+  const tokens: JlptFuriganaToken[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const surface = asString(item.surface ?? item.text ?? item.word ?? item.kanji);
+    if (!surface) continue;
+    const reading = asString(item.reading ?? item.furigana ?? item.yomi);
+    tokens.push({ surface, reading });
+  }
+  return tokens;
 }
 
 function tidyOptions(value: unknown): JlptOptionRow[] {
@@ -536,22 +586,41 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
     if (!isRecord(item)) continue;
     const option = asString(item.option ?? item.number ?? item.label ?? item.id);
     const japanese = asString(item.japanese ?? item.text ?? item.word ?? item.kanji);
+    const reading = asString(item.reading ?? item.furigana ?? item.yomi);
     const meaning_burmese = asString(
       item.meaning_burmese ?? item.meaningBurmese ?? item.burmese ?? item.meaning ?? item.myanmar,
     );
+    const usage_burmese = asString(
+      item.usage_burmese ?? item.usageBurmese ?? item.usage ?? item.context ?? item.collocation,
+    );
+    const why_wrong_burmese = asString(
+      item.why_wrong_burmese ??
+        item.whyWrongBurmese ??
+        item.why_wrong ??
+        item.whyWrong ??
+        item.distractor_reason ??
+        item.incorrect_reason,
+    );
     if (!option && !japanese && !meaning_burmese) continue;
-    rows.push({ option, japanese, meaning_burmese });
+    rows.push({
+      option,
+      japanese,
+      reading,
+      meaning_burmese,
+      usage_burmese,
+      why_wrong_burmese,
+    });
   }
   return rows;
 }
 
 function toMondaiType(value: unknown): JlptMondaiType | null {
-  if (typeof value === "number" && (value === 4 || value === 5 || value === 6)) return value;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 6) {
+    return value as JlptMondaiType;
+  }
   if (typeof value === "string") {
-    const match = value.trim().match(/([456])/);
-    if (match?.[1] === "4" || match?.[1] === "5" || match?.[1] === "6") {
-      return Number(match[1]) as JlptMondaiType;
-    }
+    const match = value.trim().match(/([1-6])/);
+    if (match?.[1]) return Number(match[1]) as JlptMondaiType;
   }
   return null;
 }
