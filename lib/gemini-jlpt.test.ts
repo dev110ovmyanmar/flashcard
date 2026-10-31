@@ -232,7 +232,7 @@ test("merges Mondai batch results without losing questions", () => {
 test("scopes prompt when mondaiTypes are provided", () => {
   const body = buildJlptGenerateContentBody("YWJj", "image/jpeg", { mondaiTypes: [5, 6] });
   const textPart = body.contents[0]?.parts[0];
-  assert.ok(textPart && "text" in textPart);
+  assert.ok(textPart && "text" in textPart && typeof textPart.text === "string");
   assert.match(textPart.text, /問題5・6/);
   assert.match(textPart.text, /1問も漏らさず/);
 });
