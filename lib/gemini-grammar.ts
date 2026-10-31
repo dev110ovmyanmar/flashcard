@@ -37,23 +37,25 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
         type: Type.OBJECT,
         properties: {
           questionNumber: { type: Type.STRING, description: "Question number or star label" },
-          questionText: { type: Type.STRING, description: "Full Japanese question text" },
+          questionText: {
+            type: Type.STRING,
+            description:
+              "Full Japanese question text; kanji should use 漢字《ひらがな》 markup for furigana hover",
+          },
           correctAnswer: { type: Type.STRING, description: "Correct option number or label" },
-          grammarPattern: { type: Type.STRING, description: "Target grammar pattern" },
+          grammarPattern: {
+            type: Type.STRING,
+            description: "Target grammar with reading, e.g. ～にもかかわらず《にもかかわらず》",
+          },
           correctReasonBurmese: {
             type: Type.STRING,
             description:
-              "Deep sensei-style Burmese: why this grammar fits the speaker's nuance, emotion, and contextual intent",
+              "Clear natural Burmese: why this grammar fits the question sentence context. Japanese keywords as 語《よみ》",
           },
           incorrectReasonsBurmese: {
             type: Type.STRING,
             description:
-              "One wrong option per line as '2 わけだ: …\\n3 ようだ: …' — Burmese why each fails (literal meaning + connection mismatch). Never a single jammed paragraph",
-          },
-          syntaxBreakdown: {
-            type: Type.STRING,
-            description:
-              "Exact conjugation/connection rule (e.g. Verb dictionary form + ことだ) plus 1–2 contextual Japanese example sentences. No Burmese gloss line",
+              "One wrong option per line as '2 にかかわらず《にかかわらず》: <natural Burmese why wrong> 例: <Japanese example sentence with 漢字《ひらがな》>\\n'",
           },
         },
         required: [
@@ -63,7 +65,6 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
           "grammarPattern",
           "correctReasonBurmese",
           "incorrectReasonsBurmese",
-          "syntaxBreakdown",
         ],
       },
     },
@@ -267,9 +268,6 @@ function tidyQuestion(value: unknown): GrammarQuestion | null {
   const incorrectReasonsBurmese = asString(
     value.incorrectReasonsBurmese ?? value.incorrect_reasons_burmese ?? value.wrong_reasons,
   );
-  const syntaxBreakdown = asString(
-    value.syntaxBreakdown ?? value.syntax_breakdown ?? value.structure ?? value.breakdown,
-  );
 
   if (!questionNumber && !questionText && !grammarPattern) return null;
 
@@ -280,7 +278,6 @@ function tidyQuestion(value: unknown): GrammarQuestion | null {
     grammarPattern,
     correctReasonBurmese,
     incorrectReasonsBurmese,
-    syntaxBreakdown,
   };
 }
 

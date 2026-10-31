@@ -41,7 +41,6 @@ describe("GRAMMAR_RESPONSE_SCHEMA", () => {
       "grammarPattern",
       "correctReasonBurmese",
       "incorrectReasonsBurmese",
-      "syntaxBreakdown",
     ]);
   });
 });
@@ -56,8 +55,8 @@ describe("questionsFromGrammarGemini", () => {
           correctAnswer: "1",
           grammarPattern: "～にもかかわらず",
           correctReasonBurmese: "ဆန့်ကျင်ဘက်ဖြစ်သောကြောင့်",
-          incorrectReasonsBurmese: "အခြားရွေးချယ်မှုများ မကိုက်ညီ",
-          syntaxBreakdown: "[忙しい] + にもかかわらず",
+          incorrectReasonsBurmese:
+            "2 にかかわらず: မကိုက်ညီ။ ဥပမာ: 年齢にかかわらず参加できる。",
         },
       ],
     });
@@ -77,12 +76,11 @@ describe("questionsFromGrammarGemini", () => {
           grammar_pattern: "～ものなら",
           correct_reason_burmese: "မှန်",
           incorrect_reasons_burmese: "မမှန်",
-          syntax_breakdown: "N + ものなら",
         },
       ],
     });
     assert.equal(parsed.questions[0]?.questionNumber, "★2");
-    assert.equal(parsed.questions[0]?.syntaxBreakdown, "N + ものなら");
+    assert.equal(parsed.questions[0]?.grammarPattern, "～ものなら");
   });
 
   it("returns an error for empty payloads", () => {

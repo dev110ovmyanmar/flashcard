@@ -8,9 +8,12 @@ import {
   googleGenerativeAiErrorMessage,
   jlptGeminiModelChain,
   jlptGeminiModelName,
+  mergeJlptQuestions,
   normalizeImageMimeType,
   questionsFromGemini,
+  recoverPartialJlptQuestions,
   JLPT_DEFAULT_GEMINI_MODEL,
+  JLPT_MAX_OUTPUT_TOKENS,
 } from "./gemini-jlpt";
 
 const SAMPLE = {
@@ -93,7 +96,8 @@ test("builds REST inline_data image parts with cleaned base64 and jpeg mime", ()
   assert.equal(imagePart.inline_data.data, "YWJjZA==");
   assert.equal(body.generationConfig.responseMimeType, "application/json");
   assert.equal(body.generationConfig.temperature, 0.2);
-  assert.equal(body.generationConfig.maxOutputTokens, 8192);
+  assert.equal(body.generationConfig.maxOutputTokens, JLPT_MAX_OUTPUT_TOKENS);
+  assert.equal(JLPT_MAX_OUTPUT_TOKENS, 65_536);
   assert.equal("thinkingConfig" in body.generationConfig, false);
   assert.deepEqual(Object.keys(body.generationConfig).sort(), [
     "maxOutputTokens",
@@ -194,3 +198,42 @@ test("extracts exact Gemini API error messages", () => {
   });
   assert.match(message, /fetch failed|MODEL_NOT_FOUND|not found/i);
 });
+
+test("recovers complete questions from truncated JSON", () => {
+  const truncated = `{
+  "questions": [
+    ${JSON.stringify(SAMPLE.questions[0])},
+    {
+      "mondai_type": 4,
+      "question_number": 2,
+      "japanese_sentence": "途中で切れた
+`;
+  const recovered = recoverPartialJlptQuestions(truncated);
+  assert.ok(recovered);
+  assert.equal(recovered.partial, true);
+  assert.equal(recovered.questions.length, 1);
+  assert.equal(recovered.questions[0]?.target_word, "失敗");
+
+  const fromGemini = questionsFromGemini(truncated);
+  assert.equal(fromGemini.partial, true);
+  assert.equal(fromGemini.questions.length, 1);
+});
+
+test("merges Mondai batch results without losing questions", () => {
+  const a = { ...SAMPLE.questions[0], mondai_type: 1 as const, question_number: 1 };
+  const b = { ...SAMPLE.questions[0], mondai_type: 5 as const, question_number: 2, explanation_burmese: "" };
+  const bFull = { ...b, explanation_burmese: "ပြည့်စုံ" };
+  const merged = mergeJlptQuestions([a, b], [bFull]);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0]?.mondai_type, 1);
+  assert.equal(merged[1]?.explanation_burmese, "ပြည့်စုံ");
+});
+
+test("scopes prompt when mondaiTypes are provided", () => {
+  const body = buildJlptGenerateContentBody("YWJj", "image/jpeg", { mondaiTypes: [5, 6] });
+  const textPart = body.contents[0]?.parts[0];
+  assert.ok(textPart && "text" in textPart);
+  assert.match(textPart.text, /問題5・6/);
+  assert.match(textPart.text, /1問も漏らさず/);
+});
+

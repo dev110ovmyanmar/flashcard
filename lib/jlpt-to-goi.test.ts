@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { jlptQuestionsToVocabRows } from "./jlpt-to-goi";
+import {
+  cleanHeadword,
+  cleanReading,
+  isValidVocabEntry,
+  jlptQuestionsToVocabRows,
+  primaryMeaning,
+} from "./jlpt-to-goi";
 import type { JlptQuestion } from "@/src/constants/jlptPrompt";
 
 const SAMPLE: JlptQuestion = {
@@ -51,11 +57,11 @@ const SAMPLE: JlptQuestion = {
       why_wrong_burmese: "အဆုံးသတ်ခြင်းနှင့် မကိုက်",
     },
   ],
-  explanation_burmese: "",
-  nuance_note: "",
+  explanation_burmese: "ရှည်လျားသော ရှင်းလင်းချက် မပါသင့်",
+  nuance_note: "nuance မပါသင့်",
 };
 
-test("maps every JLPT option into Goi vocab rows", () => {
+test("maps every JLPT option into short Goi vocab rows", () => {
   const rows = jlptQuestionsToVocabRows([SAMPLE]);
   assert.equal(rows.length, 4);
   assert.deepEqual(
@@ -63,19 +69,93 @@ test("maps every JLPT option into Goi vocab rows", () => {
     ["成功", "完成", "失敗", "継続"],
   );
   assert.equal(rows[2]?.reading, "しっぱい");
-  assert.match(rows[2]?.meaning ?? "", /正解/);
-  assert.match(rows[0]?.meaning ?? "", /誤:/);
+  assert.equal(rows[2]?.meaning, "မအောင်မြင်ခြင်း");
+  assert.equal(rows[0]?.meaning, "အောင်မြင်ခြင်း");
+
+  for (const row of rows) {
+    assert.doesNotMatch(row.meaning, /အစီအစဉ်|မှားသော|အဖြေမှန်|ရှင်းလင်းချက်|nuance/);
+  }
 });
 
-test("falls back to target_word when options are empty", () => {
+test("skips fallback target_word when there is no short Burmese gloss", () => {
   const rows = jlptQuestionsToVocabRows([
     {
       ...SAMPLE,
       options_table: [],
       explanation_burmese: "ရှင်းလင်းချက်",
+      nuance_note: "nuance",
     },
   ]);
+  assert.equal(rows.length, 0);
+});
+
+test("keeps only the first / most practical Burmese sense", () => {
+  assert.equal(primaryMeaning("လက်တွေ့ကျသော၊ ဖြစ်နိုင်သော။"), "လက်တွေ့ကျသော");
+  assert.equal(
+    primaryMeaning("တက်ကြွသော၊ ရှေ့တိုးသော၊ အပြုသဘောဆောင်သော။"),
+    "တက်ကြွသော",
+  );
+  assert.equal(primaryMeaning("ဝယ်သည်"), "ဝယ်သည်");
+  assert.equal(primaryMeaning("buy / purchase"), "");
+  assert.equal(primaryMeaning("現実的《げんじつてき》 လက်တွေ့ကျသော"), "လက်တွေ့ကျသော");
+});
+
+test("rejects invalid headwords, readings, and empty glosses", () => {
+  assert.equal(cleanHeadword("_____"), "");
+  assert.equal(cleanHeadword("???"), "");
+  assert.equal(cleanHeadword("安心"), "安心");
+  assert.equal(cleanReading("あんしん", "安心"), "あんしん");
+  assert.equal(cleanReading("anshin", "安心"), "");
+  assert.equal(cleanReading("အာန်ရှင်", "安心"), "");
+  assert.equal(isValidVocabEntry("安心", "あんしん", "စိတ်ချရခြင်း"), true);
+  assert.equal(isValidVocabEntry("安心", "", "စိတ်ချရခြင်း"), false);
+  assert.equal(isValidVocabEntry("安心", "あんしん", ""), false);
+  assert.equal(isValidVocabEntry("_____", "あ", "စမ်း"), false);
+});
+
+test("drops garbled or incomplete options when saving", () => {
+  const rows = jlptQuestionsToVocabRows([
+    {
+      ...SAMPLE,
+      options_table: [
+        {
+          option: "1",
+          japanese: "安心",
+          reading: "あんしん",
+          meaning_burmese: "စိတ်ချရခြင်း၊ ငြိမ်းချမ်းခြင်း၊ သက်သာခြင်း။",
+          usage_burmese: "long note",
+          why_wrong_burmese: "",
+        },
+        {
+          option: "2",
+          japanese: "_____",
+          reading: "あ",
+          meaning_burmese: "အလွတ်",
+          usage_burmese: "",
+          why_wrong_burmese: "",
+        },
+        {
+          option: "3",
+          japanese: "失敗",
+          reading: "shippai",
+          meaning_burmese: "မအောင်မြင်ခြင်း",
+          usage_burmese: "",
+          why_wrong_burmese: "",
+        },
+        {
+          option: "4",
+          japanese: "成功",
+          reading: "せいこう",
+          meaning_burmese: "",
+          usage_burmese: "အစီအစဉ် အောင်မြင်သည်",
+          why_wrong_burmese: "",
+        },
+      ],
+    },
+  ]);
+
   assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.kanji, "失敗");
-  assert.equal(rows[0]?.reading, "しっぱい");
+  assert.equal(rows[0]?.kanji, "安心");
+  assert.equal(rows[0]?.reading, "あんしん");
+  assert.equal(rows[0]?.meaning, "စိတ်ချရခြင်း");
 });

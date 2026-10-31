@@ -1,5 +1,6 @@
 import {
-  JLPT_N2_SYSTEM_PROMPT,
+  JLPT_MONDAI_BATCHES,
+  jlptSystemPrompt,
   type JlptAnalyzePayload,
   type JlptFuriganaToken,
   type JlptMondaiType,
@@ -17,7 +18,10 @@ export const JLPT_GEMINI_FALLBACK_MODELS = [
   "gemini-3.5-flash",
 ] as const;
 
-const REQUEST_TIMEOUT_MS = 45_000;
+/** Enough headroom for a full Mondai 1–6 page of short Burmese explanations. */
+export const JLPT_MAX_OUTPUT_TOKENS = 65_536;
+
+const REQUEST_TIMEOUT_MS = 90_000;
 
 /** REST responseSchema for generateContent JSON mode. */
 const JLPT_RESPONSE_SCHEMA = {
@@ -89,7 +93,15 @@ const JLPT_RESPONSE_SCHEMA = {
 } as const;
 
 export type JlptGeminiCallResult =
-  | { ok: true; payload: unknown; rawText: string; model: string }
+  | {
+      ok: true;
+      payload: unknown;
+      rawText: string;
+      model: string;
+      questions: JlptQuestion[];
+      finishReason?: string;
+      truncated: boolean;
+    }
   | { ok: false; error: string; model: string; kind: "auth" | "billing" | "timeout" | "network" | "http" | "parse" };
 
 export function jlptGeminiModelName(value: string | undefined): string {
@@ -140,11 +152,12 @@ export function buildGenerateContentUrl(model: string, apiKey: string): string {
 export function buildJlptGenerateContentBody(
   imageBase64: string,
   mimeType: string,
-  options?: { structured?: boolean },
+  options?: { structured?: boolean; mondaiTypes?: readonly JlptMondaiType[] },
 ) {
   const structured = options?.structured !== false;
   const data = cleanImageBase64(imageBase64);
   const normalizedMime = normalizeImageMimeType(mimeType);
+  const prompt = jlptSystemPrompt(options?.mondaiTypes);
 
   // Only send fields supported by generateContent for Flash models.
   // Do not include thinking / thinkingConfig — it 400s on flash-lite / 3.8-flash.
@@ -153,7 +166,7 @@ export function buildJlptGenerateContentBody(
       {
         role: "user",
         parts: [
-          { text: JLPT_N2_SYSTEM_PROMPT },
+          { text: prompt },
           {
             inline_data: {
               mime_type: normalizedMime,
@@ -165,7 +178,7 @@ export function buildJlptGenerateContentBody(
     ],
     generationConfig: {
       temperature: 0.2,
-      maxOutputTokens: 8192,
+      maxOutputTokens: JLPT_MAX_OUTPUT_TOKENS,
       responseMimeType: "application/json",
       ...(structured ? { responseSchema: JLPT_RESPONSE_SCHEMA } : {}),
     },
@@ -177,7 +190,7 @@ export function buildJlptImageParts(imageBase64: string, mimeType: string) {
   const data = cleanImageBase64(imageBase64);
   const normalizedMime = normalizeImageMimeType(mimeType);
   return [
-    { text: JLPT_N2_SYSTEM_PROMPT },
+    { text: jlptSystemPrompt() },
     {
       inlineData: {
         mimeType: normalizedMime,
@@ -193,15 +206,132 @@ export async function callJlptGenerateContent(options: {
   imageBase64: string;
   mimeType: string;
   structured?: boolean;
+  mondaiTypes?: readonly JlptMondaiType[];
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, structured = true } = options;
+  const { apiKey, model, imageBase64, mimeType, structured = true, mondaiTypes } = options;
   return postJlptGenerateContent({
     apiKey,
     model,
     imageBase64,
     mimeType,
     structured,
+    mondaiTypes,
   });
+}
+
+/**
+ * Full-page analysis with automatic Mondai batch continuation when the first
+ * response is truncated (MAX_TOKENS) or only partially parseable.
+ */
+export async function analyzeJlptExamPaper(options: {
+  apiKey: string;
+  model: string;
+  imageBase64: string;
+  mimeType: string;
+}): Promise<JlptGeminiCallResult> {
+  const { apiKey, model, imageBase64, mimeType } = options;
+
+  const first = await callJlptGenerateContent({
+    apiKey,
+    model,
+    imageBase64,
+    mimeType,
+    structured: true,
+  });
+
+  if (!first.ok) {
+    if (first.kind === "parse" || isStructuredOutputError(first.error)) {
+      const loose = await callJlptGenerateContent({
+        apiKey,
+        model,
+        imageBase64,
+        mimeType,
+        structured: false,
+      });
+      if (!loose.ok) return first;
+      return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, seed: loose });
+    }
+    return first;
+  }
+
+  return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, seed: first });
+}
+
+async function completeJlptIfNeeded(options: {
+  apiKey: string;
+  model: string;
+  imageBase64: string;
+  mimeType: string;
+  seed: Extract<JlptGeminiCallResult, { ok: true }>;
+}): Promise<JlptGeminiCallResult> {
+  const { apiKey, model, imageBase64, mimeType, seed } = options;
+
+  if (!seed.truncated && seed.questions.length > 0) {
+    return seed;
+  }
+
+  console.info("[Gemini JLPT] continuing with Mondai batches", {
+    model,
+    seedCount: seed.questions.length,
+    truncated: seed.truncated,
+    finishReason: seed.finishReason,
+  });
+
+  let merged = seed.questions;
+  let rawParts = [seed.rawText];
+  let anyOk = seed.questions.length > 0;
+  let lastError = "";
+
+  for (const batch of JLPT_MONDAI_BATCHES) {
+    let batchResult = await callJlptGenerateContent({
+      apiKey,
+      model,
+      imageBase64,
+      mimeType,
+      structured: true,
+      mondaiTypes: batch,
+    });
+
+    if (!batchResult.ok && (batchResult.kind === "parse" || isStructuredOutputError(batchResult.error))) {
+      batchResult = await callJlptGenerateContent({
+        apiKey,
+        model,
+        imageBase64,
+        mimeType,
+        structured: false,
+        mondaiTypes: batch,
+      });
+    }
+
+    if (!batchResult.ok) {
+      lastError = batchResult.error;
+      console.error("[Gemini JLPT] batch failed", { batch, message: batchResult.error });
+      continue;
+    }
+
+    anyOk = true;
+    merged = mergeJlptQuestions(merged, batchResult.questions);
+    rawParts.push(batchResult.rawText);
+  }
+
+  if (!anyOk) {
+    return {
+      ok: false,
+      error: lastError || seed.rawText || "Gemini returned an incomplete analysis.",
+      model,
+      kind: "parse",
+    };
+  }
+
+  return {
+    ok: true,
+    payload: seed.payload,
+    rawText: rawParts.filter(Boolean).join("\n\n"),
+    model,
+    questions: merged,
+    finishReason: seed.finishReason,
+    truncated: false,
+  };
 }
 
 async function postJlptGenerateContent(options: {
@@ -210,10 +340,11 @@ async function postJlptGenerateContent(options: {
   imageBase64: string;
   mimeType: string;
   structured: boolean;
+  mondaiTypes?: readonly JlptMondaiType[];
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, structured } = options;
+  const { apiKey, model, imageBase64, mimeType, structured, mondaiTypes } = options;
   const url = buildGenerateContentUrl(model, apiKey);
-  const body = buildJlptGenerateContentBody(imageBase64, mimeType, { structured });
+  const body = buildJlptGenerateContentBody(imageBase64, mimeType, { structured, mondaiTypes });
   const mime = body.contents[0]?.parts[1]?.inline_data?.mime_type ?? mimeType;
   const base64Chars = body.contents[0]?.parts[1]?.inline_data?.data.length ?? 0;
 
@@ -222,8 +353,10 @@ async function postJlptGenerateContent(options: {
     JSON.stringify({
       model,
       structured,
+      mondaiTypes: mondaiTypes ?? "all",
       mimeType: mime,
       base64Chars,
+      maxOutputTokens: JLPT_MAX_OUTPUT_TOKENS,
       endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       generationConfigKeys: Object.keys(body.generationConfig),
       apiKeyPresent: Boolean(apiKey),
@@ -273,17 +406,39 @@ async function postJlptGenerateContent(options: {
     return { ok: false, error: message, model, kind };
   }
 
+  const finishReason = extractFinishReason(payload);
+  const truncatedByModel = isTruncationFinishReason(finishReason);
   const parsed = questionsFromGemini(payload);
+
   if (parsed.error && parsed.questions.length === 0) {
     console.error("[Gemini JLPT] parse failed", {
       model,
       message: parsed.error,
+      finishReason,
       rawSnippet: parsed.rawText.slice(0, 500) || rawBody.slice(0, 500),
     });
     return { ok: false, error: parsed.error, model, kind: "parse" };
   }
 
-  return { ok: true, payload, rawText: parsed.rawText, model };
+  const truncated = truncatedByModel || Boolean(parsed.partial);
+  if (truncated) {
+    console.warn("[Gemini JLPT] truncated or partial response", {
+      model,
+      finishReason,
+      questionCount: parsed.questions.length,
+      partial: parsed.partial,
+    });
+  }
+
+  return {
+    ok: true,
+    payload,
+    rawText: parsed.rawText,
+    model,
+    questions: parsed.questions,
+    finishReason,
+    truncated,
+  };
 }
 
 function diagnoseFetchFailure(
@@ -456,13 +611,15 @@ export function questionsFromGemini(payload: unknown): {
   questions: JlptQuestion[];
   rawText: string;
   error?: string;
+  /** True when JSON was truncated and only complete question objects were recovered. */
+  partial?: boolean;
 } {
   if (typeof payload === "string") {
     const parsed = parseModelJson(payload);
     if (!parsed) {
       return { questions: [], rawText: payload, error: "Gemini returned JSON that could not be parsed." };
     }
-    return { questions: parsed.questions, rawText: payload };
+    return { questions: parsed.questions, rawText: payload, partial: parsed.partial };
   }
 
   if (!isRecord(payload)) return { questions: [], rawText: "", error: "Gemini returned an empty response." };
@@ -482,19 +639,134 @@ export function questionsFromGemini(payload: unknown): {
     return { questions: [], rawText: text, error: blocked ?? "Gemini returned JSON that could not be parsed." };
   }
 
-  return { questions: parsed.questions, rawText: text, error: blocked };
+  return { questions: parsed.questions, rawText: text, error: blocked, partial: parsed.partial };
 }
 
-function parseModelJson(text: string): JlptAnalyzePayload | null {
+function parseModelJson(text: string): (JlptAnalyzePayload & { partial?: boolean }) | null {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = (fenced?.[1] ?? text).trim();
   const start = candidate.search(/[[{]/);
   if (start < 0) return null;
+  const slice = candidate.slice(start);
   try {
-    return normalizeJlptValue(JSON.parse(candidate.slice(start)) as unknown);
+    const normalized = normalizeJlptValue(JSON.parse(slice) as unknown);
+    return normalized ? { ...normalized, partial: false } : null;
   } catch {
-    return null;
+    const recovered = recoverPartialJlptQuestions(slice);
+    return recovered;
   }
+}
+
+/** Salvage complete question objects from truncated Gemini JSON. */
+export function recoverPartialJlptQuestions(text: string): (JlptAnalyzePayload & { partial: true }) | null {
+  const questionsIdx = text.search(/"questions"\s*:\s*\[/);
+  let cursor = -1;
+  if (questionsIdx >= 0) {
+    cursor = text.indexOf("[", questionsIdx);
+  } else {
+    const rootArray = text.trimStart().startsWith("[") ? 0 : text.search(/\[[\s\S]*"mondai_type"/);
+    cursor = rootArray;
+  }
+  if (cursor < 0) return null;
+
+  const questions: JlptQuestion[] = [];
+  let i = cursor + 1;
+  while (i < text.length) {
+    while (i < text.length && /[\s,]/.test(text[i]!)) i += 1;
+    if (i >= text.length || text[i] === "]") break;
+    if (text[i] !== "{") break;
+    const extracted = extractBalancedJsonObject(text, i);
+    if (!extracted) break;
+    try {
+      const question = tidyQuestion(JSON.parse(extracted.json) as unknown);
+      if (question) questions.push(question);
+    } catch {
+      // skip malformed fragment
+    }
+    i = extracted.end;
+  }
+
+  if (questions.length === 0) return null;
+  questions.sort((a, b) => a.mondai_type - b.mondai_type || a.question_number - b.question_number);
+  return { questions, partial: true };
+}
+
+function extractBalancedJsonObject(text: string, start: number): { json: string; end: number } | null {
+  if (text[start] !== "{") return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return { json: text.slice(start, i + 1), end: i + 1 };
+    }
+  }
+  return null;
+}
+
+export function mergeJlptQuestions(...lists: JlptQuestion[][]): JlptQuestion[] {
+  const map = new Map<string, JlptQuestion>();
+  for (const list of lists) {
+    for (const question of list) {
+      const key = `${question.mondai_type}:${question.question_number}`;
+      const previous = map.get(key);
+      if (!previous || questionCompleteness(question) >= questionCompleteness(previous)) {
+        map.set(key, question);
+      }
+    }
+  }
+  return [...map.values()].sort(
+    (a, b) => a.mondai_type - b.mondai_type || a.question_number - b.question_number,
+  );
+}
+
+function questionCompleteness(question: JlptQuestion): number {
+  return (
+    (question.japanese_sentence ? 3 : 0) +
+    (question.target_word ? 1 : 0) +
+    (question.correct_option ? 1 : 0) +
+    (question.explanation_burmese ? 1 : 0) +
+    question.options_table.length * 2 +
+    question.furigana_tokens.length +
+    question.options_table.reduce(
+      (sum, row) => sum + (row.meaning_burmese ? 1 : 0) + (row.usage_burmese ? 1 : 0),
+      0,
+    )
+  );
+}
+
+export function extractFinishReason(payload: unknown): string | undefined {
+  if (!isRecord(payload)) return undefined;
+  const response = isRecord(payload.response) ? payload.response : payload;
+  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  const first = candidates.find(isRecord);
+  if (!first) return undefined;
+  const reason = first.finishReason ?? first.finish_reason;
+  return typeof reason === "string" ? reason : undefined;
+}
+
+export function isTruncationFinishReason(reason: string | undefined): boolean {
+  if (!reason) return false;
+  return /MAX_TOKENS|LENGTH|max.?token/i.test(reason);
 }
 
 function normalizeJlptValue(value: unknown): JlptAnalyzePayload | null {
@@ -693,10 +965,8 @@ function blockReason(payload: Record<string, unknown>): string | undefined {
   if (feedback && typeof feedback.blockReason === "string" && feedback.blockReason !== "BLOCK_REASON_UNSPECIFIED") {
     return `Gemini blocked the photo (${feedback.blockReason}).`;
   }
-  const response = isRecord(payload.response) ? payload.response : payload;
-  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
-  const first = candidates.find(isRecord);
-  if (first && (first.finishReason === "SAFETY" || first.finishReason === "PROHIBITED_CONTENT")) {
+  const reason = extractFinishReason(payload);
+  if (reason === "SAFETY" || reason === "PROHIBITED_CONTENT") {
     return "Gemini blocked the photo.";
   }
   return undefined;

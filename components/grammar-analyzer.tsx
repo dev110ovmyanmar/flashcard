@@ -12,14 +12,31 @@ import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
 type PreparedGrammarImage = { base64: string; previewUrl: string };
 
-const PAGE_TITLE = "Grammar & ★ Analyzer";
+const PAGE_TITLE = "Japanese Grammar Analyzer";
 
+const surface =
+  "rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] backdrop-blur-sm dark:border-border/50 dark:ring-white/[0.03]";
+
+/** Primary CTA — Analyze */
 const btnAnalyze =
-  "h-11 min-w-[7.5rem] flex-1 gap-2 rounded-xl px-5 text-sm font-medium border border-emerald-600/30 bg-emerald-600 text-white shadow-none transition-colors duration-200 hover:bg-emerald-500 disabled:opacity-50 dark:border-emerald-500/40 dark:bg-emerald-600 dark:hover:bg-emerald-500 sm:flex-none [&_svg:not([class*='size-'])]:size-4";
-const btnUtility =
-  "h-9 gap-1.5 rounded-lg px-3 text-xs font-medium text-stone-600 transition-colors duration-200 hover:bg-stone-100 hover:text-stone-900 dark:text-neutral-400 dark:hover:bg-neutral-800/80 dark:hover:text-neutral-100 [&_svg:not([class*='size-'])]:size-3.5";
-const btnUtilityOutline =
-  "h-9 gap-1.5 rounded-lg border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 shadow-none transition-colors duration-200 hover:border-stone-300 hover:bg-stone-50 hover:text-stone-900 dark:border-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:bg-neutral-800/60 dark:hover:text-neutral-100 [&_svg:not([class*='size-'])]:size-3.5";
+  [
+    "inline-flex h-11 min-h-11 w-full items-center justify-center gap-2 rounded-xl px-5",
+    "border border-primary/30 bg-primary text-sm font-semibold tracking-tight text-primary-foreground",
+    "shadow-[0_1px_2px_color-mix(in_oklab,var(--foreground)_12%,transparent),0_6px_16px_-8px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
+    "transition-all duration-200",
+    "hover:bg-primary/92 hover:shadow-[0_2px_4px_color-mix(in_oklab,var(--foreground)_10%,transparent),0_10px_22px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)]",
+    "active:translate-y-px active:scale-[0.985] active:shadow-none",
+    "disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none",
+    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/45",
+    "sm:w-auto sm:min-w-[8.5rem]",
+    "[&_svg:not([class*='size-'])]:size-4",
+  ].join(" ");
+
+const btnGhost =
+  "h-9 gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground active:scale-[0.98] dark:hover:bg-white/[0.06] [&_svg:not([class*='size-'])]:size-3.5";
+
+const btnOutline =
+  "h-9 gap-1.5 rounded-lg border border-border/70 bg-background/50 px-3 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200 hover:border-border hover:bg-muted/50 hover:text-foreground active:scale-[0.98] dark:border-white/10 dark:hover:bg-white/[0.05] [&_svg:not([class*='size-'])]:size-3.5";
 
 export function GrammarAnalyzer() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -87,154 +104,129 @@ export function GrammarAnalyzer() {
     }
   }
 
+  const hasResults = questions.length > 0;
+
   return (
     <div className="min-h-full">
-      <header className="sticky top-0 z-30 border-b border-stone-200/90 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl dark:border-neutral-800/80 dark:bg-[#0d1117]/90">
-        <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-2 px-3 sm:h-16 sm:gap-3 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <div className="mx-auto flex h-12 w-full max-w-4xl items-center justify-between gap-3 px-4 sm:h-14 sm:px-6">
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <Link
               href="/"
-              className="inline-flex h-11 shrink-0 items-center rounded-xl px-3 text-sm font-medium text-stone-600 transition-all duration-200 hover:bg-stone-100 hover:text-stone-900 sm:h-9 dark:text-neutral-400 dark:hover:bg-neutral-800/70 dark:hover:text-neutral-100"
+              className="inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground active:scale-[0.98]"
             >
               ← Decks
             </Link>
-            <p className="truncate text-sm font-medium text-stone-900 dark:text-neutral-100">{PAGE_TITLE}</p>
+            <span className="hidden h-4 w-px bg-border/80 sm:block" aria-hidden />
+            <p className="truncate text-sm font-medium tracking-tight">{PAGE_TITLE}</p>
           </div>
           <ThemeToggle />
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-3 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-12">
+      <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:space-y-5 sm:px-6 sm:pt-7">
         {geminiReady === false ? (
-          <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-950 sm:mb-5 sm:px-4 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-6">
             No Gemini API key is set. Add <code className="text-xs">GEMINI_API_KEY</code> to{" "}
             <code className="text-xs">.env.local</code>, then restart the dev server.
           </p>
         ) : null}
 
-        <section className="w-full">
+        <section
+          className={[
+            surface,
+            "overflow-hidden transition-all duration-200",
+            dragging ? "border-primary/40 bg-primary/[0.06] shadow-sm" : "",
+          ].join(" ")}
+        >
           <div
             className={[
-              "w-full overflow-hidden rounded-2xl border shadow-sm transition-colors duration-200 dark:shadow-xl",
-              dragging
-                ? "border-emerald-400/60 bg-emerald-50/80 dark:border-emerald-500/40 dark:bg-emerald-950/30"
-                : "border-stone-200 bg-white dark:border-neutral-800/80 dark:bg-[#0d1117]",
+              "px-4 py-5 text-center transition-colors duration-200 sm:px-5 sm:py-5",
+              prepared ? "bg-muted/20" : "border-b border-dashed border-border/50",
             ].join(" ")}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              void takeFile(event.dataTransfer.files?.[0] ?? null);
+            }}
           >
-            <div
-              className={[
-                "px-4 py-6 text-center transition-colors duration-200 sm:px-6 sm:py-8",
-                prepared
-                  ? "bg-stone-50/80 dark:bg-[#161b22]"
-                  : "border-b border-dashed border-stone-200 dark:border-neutral-800",
-              ].join(" ")}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(event) => {
-                event.preventDefault();
-                setDragging(false);
-                void takeFile(event.dataTransfer.files?.[0] ?? null);
-              }}
-            >
-              {prepared ? (
-                <div className="relative mx-auto max-w-full">
-                  {/* Local preview of a compressed photo the user just chose. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={prepared.previewUrl}
-                    alt="Selected grammar page"
-                    className={[
-                      "mx-auto max-h-48 w-full rounded-xl object-contain transition-opacity sm:max-h-64",
-                      analyzing ? "opacity-40" : "",
-                    ].join(" ")}
-                  />
-                  {analyzing ? (
-                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="size-7 animate-spin text-emerald-600 dark:text-emerald-400" />
-                      <p className="text-sm font-medium tracking-tight text-stone-900 dark:text-neutral-100">
-                        Analyzing grammar…
-                      </p>
-                    </div>
-                  ) : null}
+            {prepared ? (
+              // Local preview of a compressed photo the user just chose.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={prepared.previewUrl}
+                alt="Selected grammar page"
+                className="mx-auto max-h-44 w-full rounded-lg border border-border/50 object-contain sm:max-h-52"
+              />
+            ) : (
+              <div className="flex flex-col items-center py-1 sm:py-2">
+                <div className="grid size-11 place-items-center rounded-xl border border-border/60 bg-background text-primary transition-transform duration-200">
+                  <ImagePlus className="size-5" />
                 </div>
-              ) : (
-                <>
-                  <div className="mx-auto grid size-12 place-items-center rounded-xl border border-stone-200 bg-white text-emerald-700 dark:border-neutral-700 dark:bg-[#161b22] dark:text-emerald-400">
-                    <ImagePlus className="size-5" />
-                  </div>
-                  <p className="mt-3.5 text-sm font-medium tracking-tight text-stone-900 dark:text-neutral-100">
-                    Drop a grammar / ★ page here
-                  </p>
-                  <p className="mt-1.5 text-xs text-stone-600 dark:text-neutral-400">JPEG, PNG, or WebP</p>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-stone-200 px-3 py-3 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4 sm:py-3.5">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={btnUtilityOutline}
-                  disabled={analyzing}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <ImagePlus />
-                  Choose photo
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={btnUtilityOutline}
-                  disabled={analyzing}
-                  onClick={() => cameraRef.current?.click()}
-                >
-                  <Camera />
-                  Camera
-                </Button>
-                {prepared ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className={btnUtility}
-                    disabled={analyzing}
-                    onClick={clearSelection}
-                  >
-                    <X />
-                    Clear
-                  </Button>
-                ) : null}
-              </div>
-
-              <Button
-                type="button"
-                className={btnAnalyze}
-                disabled={!prepared || analyzing || geminiReady === false}
-                onClick={() => void analyze()}
-              >
-                {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                {analyzing ? "Analyzing…" : "Explain"}
-              </Button>
-            </div>
-          </div>
-
-          {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-
-          {analyzing && prepared ? (
-            <div className="mt-4 flex items-center gap-3 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 dark:border-neutral-800 dark:bg-[#161b22]">
-              <Loader2 className="size-4 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-stone-900 dark:text-neutral-100">Reading grammar patterns…</p>
-                <p lang="my" className="font-myanmar text-xs text-stone-600 dark:text-neutral-400">
-                  ခဏစောင့်ပါ — AI က ရှင်းလင်းချက်ရေးနေသည်
+                <p className="mt-3 text-sm font-medium tracking-tight text-foreground">
+                  Drop an image here
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  PNG, JPG, or WebP · Grammar / ★
                 </p>
               </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-border/50 px-3 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                className={btnOutline}
+                disabled={analyzing}
+                onClick={() => fileRef.current?.click()}
+              >
+                <ImagePlus />
+                Choose photo
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={btnOutline}
+                disabled={analyzing}
+                onClick={() => cameraRef.current?.click()}
+              >
+                <Camera />
+                Camera
+              </Button>
+              {prepared ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={btnGhost}
+                  disabled={analyzing}
+                  onClick={clearSelection}
+                >
+                  <X />
+                  Clear
+                </Button>
+              ) : null}
             </div>
-          ) : null}
+
+            <button
+              type="button"
+              className={btnAnalyze}
+              disabled={!prepared || analyzing || geminiReady === false}
+              onClick={() => void analyze()}
+            >
+              {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
+              <span>{analyzing ? "Analyzing…" : "Analyze"}</span>
+            </button>
+          </div>
         </section>
+
+        {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 
         <input
           ref={fileRef}
@@ -258,12 +250,18 @@ export function GrammarAnalyzer() {
           }}
         />
 
-        {questions.length > 0 ? (
-          <section className="mt-6 w-full space-y-4 sm:mt-8">
-            <p className="text-xs font-semibold tracking-wider text-stone-600 uppercase dark:text-neutral-400">
-              {questions.length} question{questions.length === 1 ? "" : "s"}
-            </p>
-            <div className="grid w-full gap-4 sm:gap-5">
+        {hasResults ? (
+          <section className="space-y-3 sm:space-y-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                Results
+              </p>
+              <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground">
+                {questions.length} question{questions.length === 1 ? "" : "s"}
+              </h2>
+            </div>
+
+            <div className="grid gap-3">
               {questions.map((question, index) => (
                 <GrammarQuestionCard
                   key={`${question.questionNumber}-${index}-${question.grammarPattern}`}

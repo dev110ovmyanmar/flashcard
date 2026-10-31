@@ -12,7 +12,7 @@ export function ThemeToggle() {
       type="button"
       variant="outline"
       size="icon"
-      className="rounded-full bg-card/80"
+      className="size-8 rounded-lg border-border/70 bg-card/80 shadow-none transition-all duration-200 hover:bg-muted/70 active:scale-[0.98]"
       aria-label="Toggle color theme"
       onClick={() => {
         const isDark = document.documentElement.classList.contains("dark");

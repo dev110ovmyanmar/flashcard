@@ -5,6 +5,7 @@ import { BookOpenText, Download, ImagePlus, Layers, Pencil, Plus, Sparkles, Tras
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { FuriganaHover } from "@/components/furigana-hover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -202,7 +203,15 @@ export function DeckLibrary({
           <ul className="grid gap-3 sm:grid-cols-2 sm:gap-4">
             {ordered.map((deck, index) => {
               const stats = deckStats(deck);
-              const lead = (deck.cards[0] ? cardFace(deck.cards[0]) : "") || "文";
+              const leadCard = deck.cards[0];
+              const lead = (leadCard ? cardFace(leadCard) : "") || "文";
+              const leadSurface = Array.from(lead).slice(0, 2).join("");
+              const leadReading =
+                leadCard?.kanji.trim() && leadSurface && leadCard.kanji.includes(leadSurface)
+                  ? leadCard.reading
+                  : leadCard?.kanji.trim() === leadSurface
+                    ? leadCard.reading
+                    : "";
               return (
                 <motion.li
                   key={deck.id}
@@ -212,11 +221,13 @@ export function DeckLibrary({
                   className="flex flex-col rounded-xl border border-border/70 bg-card p-4 shadow-xs ring-1 ring-black/[0.02] dark:ring-white/[0.03]"
                 >
                   <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => onStudy(deck.id)}>
-                    <span
-                      lang="ja"
-                      className="grid size-14 shrink-0 place-items-center rounded-xl bg-muted/40 font-serif text-2xl"
-                    >
-                      {Array.from(lead).slice(0, 2).join("")}
+                    <span className="grid size-14 shrink-0 place-items-center rounded-xl bg-muted/40 font-serif text-2xl">
+                      <FuriganaHover
+                        text={leadSurface}
+                        reading={leadReading}
+                        focusable={false}
+                        className="font-serif text-2xl leading-none"
+                      />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">

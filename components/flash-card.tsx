@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
-import { FuriganaText } from "@/components/furigana-text";
+import { FuriganaHover } from "@/components/furigana-hover";
 import { cardFace } from "@/lib/decks";
 import type { Card } from "@/lib/types";
 
@@ -56,12 +56,11 @@ export function FlashCard({
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-primary/80" />
           <div className="flex h-full w-full flex-col items-center justify-between px-5 py-6 sm:px-10 sm:py-8">
             <p className="text-[11px] tracking-[0.18em] text-muted-foreground uppercase">{deckName}</p>
-            <FuriganaText
+            <FuriganaHover
               text={face}
               reading={faceReading}
               focusable={false}
               className={`font-serif leading-none tracking-tight text-foreground ${kanjiClass(face)}`}
-              rubyClassName="gap-2"
             />
             <p className="text-sm text-muted-foreground">
               {faceReading ? "Hover for furigana · Swipe up to flip" : "Swipe up to flip"}
@@ -73,7 +72,7 @@ export function FlashCard({
           <span className="absolute inset-x-10 top-0 h-1 rounded-b-full bg-moss/80" />
           <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-5 py-6 text-center sm:gap-6 sm:px-10 sm:py-8">
             {card.kanji.trim() ? (
-              <FuriganaText
+              <FuriganaHover
                 text={card.kanji}
                 reading={card.reading}
                 alwaysShow

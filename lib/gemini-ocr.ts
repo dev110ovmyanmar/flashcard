@@ -13,10 +13,11 @@ export const GEMINI_FALLBACK_MODELS = [
 ] as const;
 
 const PROMPT = `Read this Japanese vocabulary page from top to bottom.
-Each row is a headword (keep okurigana, for example 申し込む), a hiragana or katakana reading, and a Myanmar meaning.
+Each row is a headword (keep okurigana, for example 申し込む), a hiragana or katakana reading, and a clear Myanmar (Burmese) meaning.
+Use natural Burmese only — no English mixed into the meaning.
 Skip titles, numbers, and headers.
 Return {"rows":[{"kanji":"","reading":"","meaning":""}]}.
-Do not translate into English or invent words. Use an empty string for an unreadable field.`;
+Do not invent words. Use an empty string for an unreadable field.`;
 
 export function geminiModelName(value: string | undefined): string {
   const trimmed = value?.trim().replace(/^models\//, "");

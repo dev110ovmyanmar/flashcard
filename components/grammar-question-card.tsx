@@ -1,208 +1,344 @@
 "use client";
 
-import { Check, ChevronDown } from "lucide-react";
-import { useId, useState } from "react";
-import { parseIncorrectReasonItems } from "@/lib/grammar-format";
+import { Check, ChevronDown, X } from "lucide-react";
+import { useId, useMemo, useState, type ReactNode } from "react";
+import { FuriganaHover } from "@/components/furigana-hover";
+import { Badge } from "@/components/ui/badge";
+import { harvestMarkupReadings } from "@/lib/furigana";
+import {
+  parseIncorrectReasonItems,
+  splitGrammarQuestionText,
+  type GrammarStemOption,
+  type IncorrectReasonItem,
+} from "@/lib/grammar-format";
 import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
-function SectionHeader({
-  title,
-  burmeseLabel,
-  titleClass,
-  labelClass,
-}: {
-  title: string;
-  burmeseLabel: string;
-  titleClass: string;
-  labelClass: string;
-}) {
+function buildGrammarReadings(question: GrammarQuestion): Record<string, string> {
+  const map: Record<string, string> = {};
+  harvestMarkupReadings(question.questionText, map);
+  harvestMarkupReadings(question.grammarPattern, map);
+  harvestMarkupReadings(question.correctReasonBurmese, map);
+  harvestMarkupReadings(question.incorrectReasonsBurmese, map);
+  return map;
+}
+
+function isCorrectOption(option: string, correct: string): boolean {
+  return option.trim() !== "" && option.trim() === correct.trim();
+}
+
+function optionRowClass(correct: boolean, zebra: boolean): string {
+  if (correct) {
+    return [
+      "border-l-[3px] border-l-emerald-500/90 bg-emerald-50/80",
+      "dark:border-l-emerald-400 dark:bg-emerald-500/[0.10]",
+    ].join(" ");
+  }
+  return zebra ? "bg-muted/20" : "bg-transparent";
+}
+
+function CorrectBadge() {
   return (
-    <header className="mb-3.5">
-      <h3 className={`text-xs font-bold tracking-wider uppercase ${titleClass}`}>{title}</h3>
-      <p lang="my" className={`mt-1 font-myanmar text-[11px] leading-5 ${labelClass}`}>
-        {burmeseLabel}
-      </p>
-    </header>
+    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300/70 bg-emerald-100/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-800 whitespace-nowrap dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200">
+      <Check className="size-2.5 text-emerald-600 dark:text-emerald-300" aria-hidden />
+      正解
+    </span>
   );
 }
 
-function IncorrectOptionsBlock({ text }: { text: string }) {
-  const items = parseIncorrectReasonItems(text);
+function SectionLabel({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "sky" | "rose";
+}) {
+  const toneClass =
+    tone === "sky"
+      ? "text-sky-700 dark:text-sky-300"
+      : tone === "rose"
+        ? "text-rose-700 dark:text-rose-300"
+        : "text-muted-foreground";
+  return (
+    <h3 className={`text-[10px] font-semibold tracking-[0.14em] uppercase ${toneClass}`}>{children}</h3>
+  );
+}
 
-  if (items.length >= 2) {
+function ProseWithFurigana({
+  text,
+  readings,
+  className,
+  lang = "my",
+}: {
+  text: string;
+  readings: Record<string, string>;
+  className?: string;
+  lang?: string;
+}) {
+  if (!text.trim()) {
     return (
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div
-            key={`${item.option}-${item.pattern}-${item.body.slice(0, 24)}`}
-            className={[
-              "rounded-lg border p-3 text-sm",
-              "border-stone-200 bg-white text-stone-800",
-              "dark:border-neutral-800/80 dark:bg-[#0d1117]/80 dark:text-neutral-200",
-            ].join(" ")}
-          >
-            <div className="mb-1.5 flex flex-wrap items-center gap-2">
-              <span
-                className={[
-                  "inline-block rounded px-2 py-0.5 text-xs font-semibold",
-                  "bg-amber-100 text-amber-900",
-                  "dark:bg-neutral-800 dark:text-amber-300",
-                ].join(" ")}
-              >
-                {item.option || "—"}
-                {item.pattern ? ` ${item.pattern}` : ""}
-              </span>
-            </div>
-            <p lang="my" className="font-myanmar text-sm leading-relaxed break-words text-stone-800 dark:text-neutral-200">
-              {item.body}
-            </p>
-          </div>
-        ))}
-      </div>
+      <span lang={lang} className={className}>
+        —
+      </span>
     );
   }
 
+  return <FuriganaHover text={text} readings={readings} lang={lang} className={className} />;
+}
+
+function MobileOptionCard({
+  option,
+  correct,
+  zebra,
+  readings,
+}: {
+  option: GrammarStemOption;
+  correct: boolean;
+  zebra: boolean;
+  readings: Record<string, string>;
+}) {
   return (
-    <p
-      lang="my"
-      className="font-myanmar text-sm leading-relaxed break-words whitespace-pre-wrap text-stone-800 dark:text-neutral-200"
+    <div
+      className={[
+        "rounded-lg border px-3.5 py-3 transition-colors duration-200",
+        correct ? "border-emerald-300/60 dark:border-emerald-400/25" : "border-border/50",
+        optionRowClass(correct, zebra),
+      ].join(" ")}
     >
-      {text}
-    </p>
+      <div className="flex items-start justify-between gap-3">
+        <span
+          className={[
+            "text-xs tabular-nums tracking-wide",
+            correct ? "font-semibold text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
+          ].join(" ")}
+        >
+          No. {option.label || "—"}
+        </span>
+        {correct ? <CorrectBadge /> : null}
+      </div>
+      <p
+        className={[
+          "mt-2 font-serif text-[1.05rem] leading-7 tracking-tight break-words",
+          correct
+            ? "font-semibold text-emerald-950 dark:text-emerald-50"
+            : "font-medium text-foreground",
+        ].join(" ")}
+      >
+        <FuriganaHover text={option.text || "—"} readings={readings} />
+      </p>
+    </div>
   );
 }
 
-function SyntaxBlock({ text }: { text: string }) {
-  const lines = text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) return null;
-
+function DistractorCard({
+  item,
+  readings,
+}: {
+  item: IncorrectReasonItem;
+  readings: Record<string, string>;
+}) {
   return (
-    <div className="space-y-2.5 font-mono text-sm leading-relaxed text-indigo-950 dark:text-indigo-100/90">
-      {lines.map((line, index) => (
-        <p
-          key={`${index}-${line.slice(0, 32)}`}
-          className={[
-            "break-words whitespace-pre-wrap",
-            index === 0 ? "font-semibold tracking-tight" : "opacity-95",
-          ].join(" ")}
-        >
-          {line}
-        </p>
-      ))}
-    </div>
+    <section className="rounded-lg border border-rose-500/15 bg-rose-500/[0.04] px-3.5 py-3 dark:border-rose-400/15 dark:bg-rose-400/[0.05]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-md border border-rose-300/60 bg-rose-100/70 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-rose-800 dark:border-rose-400/25 dark:bg-rose-500/12 dark:text-rose-200">
+          <X className="size-2.5" aria-hidden />
+          誤答 {item.option || "—"}
+        </span>
+        {item.pattern ? (
+          <span className="font-serif text-[15px] font-medium tracking-tight text-foreground">
+            <FuriganaHover text={item.pattern} readings={readings} className="inline font-medium" />
+          </span>
+        ) : null}
+      </div>
+      <dl className="mt-2.5 space-y-2">
+        <div>
+          <SectionLabel tone="rose">Why it doesn&apos;t fit</SectionLabel>
+          <dd className="mt-1">
+            <ProseWithFurigana
+              text={item.body || "—"}
+              readings={readings}
+              className="font-myanmar text-[13px] leading-6 break-words text-muted-foreground"
+            />
+          </dd>
+        </div>
+        {item.example ? (
+          <div>
+            <SectionLabel>ဥပမာ အသုံး</SectionLabel>
+            <dd className="mt-1">
+              <FuriganaHover
+                text={item.example}
+                readings={readings}
+                className="block font-serif text-[14px] leading-7 tracking-tight break-words text-foreground/90"
+              />
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
   );
 }
 
 export function GrammarQuestionCard({ question }: { question: GrammarQuestion }) {
   const [detailsOpen, setDetailsOpen] = useState(true);
   const panelId = useId();
-  const hasDetails = Boolean(
-    question.correctReasonBurmese || question.incorrectReasonsBurmese || question.syntaxBreakdown,
+  const readings = useMemo(() => buildGrammarReadings(question), [question]);
+  const parts = useMemo(
+    () => splitGrammarQuestionText(question.questionText || ""),
+    [question.questionText],
   );
+  const distractors = useMemo(
+    () => parseIncorrectReasonItems(question.incorrectReasonsBurmese || ""),
+    [question.incorrectReasonsBurmese],
+  );
+  const hasDetails = Boolean(question.correctReasonBurmese || question.incorrectReasonsBurmese);
 
   return (
-    <article
-      className={[
-        "w-full overflow-hidden rounded-2xl border shadow-sm",
-        "border-stone-200 bg-white",
-        "dark:border-neutral-800/80 dark:bg-[#0d1117] dark:shadow-xl",
-      ].join(" ")}
-    >
-      <div
-        className={[
-          "border-b p-4 sm:p-5",
-          "border-stone-200 bg-stone-50/80",
-          "dark:border-neutral-800 dark:bg-[#161b22]",
-        ].join(" ")}
-      >
+    <article className="w-full overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] transition-shadow duration-200 hover:shadow-sm dark:border-border/50 dark:ring-white/[0.03]">
+      {/* Question header — matches vocabulary analyzer */}
+      <div className="border-b border-border/50 bg-muted/15 px-4 py-3.5 sm:px-5 sm:py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={[
-              "inline-flex rounded-md px-2.5 py-0.5 text-[11px] font-semibold tracking-wide",
-              "bg-stone-900 text-white",
-              "dark:bg-neutral-800 dark:text-neutral-100",
-            ].join(" ")}
-          >
+          <Badge className="rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide">
+            文法
+          </Badge>
+          <Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px] font-medium">
             Q{question.questionNumber || "—"}
-          </span>
-          {question.grammarPattern ? (
-            <span
-              className={[
-                "max-w-full rounded-md px-2.5 py-0.5 text-[11px] font-medium break-words whitespace-normal",
-                "bg-stone-100 text-stone-700",
-                "dark:bg-neutral-800/90 dark:text-neutral-300",
-              ].join(" ")}
-            >
-              {question.grammarPattern}
-            </span>
-          ) : null}
+          </Badge>
           {question.correctAnswer ? (
-            <span
-              className={[
-                "ml-auto inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-[11px] font-semibold",
-                "border-emerald-200 bg-emerald-50 text-emerald-800",
-                "dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-300",
-              ].join(" ")}
+            <Badge
+              variant="outline"
+              className="ml-auto rounded-md border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
             >
-              <Check className="size-3" aria-hidden />
+              <Check className="size-3 text-emerald-600 dark:text-emerald-300" aria-hidden />
               正解 {question.correctAnswer}
-            </span>
+            </Badge>
           ) : null}
         </div>
 
-        <p
-          className={[
-            "mt-4 font-serif text-[1.05rem] leading-[1.55] tracking-tight whitespace-pre-wrap break-words sm:text-xl sm:leading-[1.5]",
-            "text-stone-900",
-            "dark:text-neutral-100",
-          ].join(" ")}
-        >
-          {question.questionText || "—"}
-        </p>
+        <FuriganaHover
+          text={parts.stem || question.questionText || "—"}
+          readings={readings}
+          className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words whitespace-pre-wrap text-foreground sm:text-lg sm:leading-[1.6]"
+        />
+
+        {question.grammarPattern ? (
+          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
+            <span className="font-medium break-words text-foreground/85">
+              <FuriganaHover text={question.grammarPattern} readings={readings} />
+            </span>
+          </p>
+        ) : null}
       </div>
 
-      {hasDetails ? (
-        <div className="p-4 sm:p-5">
+      <div className="p-3.5 sm:p-4">
+        {/* Options — same table / mobile card pattern as vocabulary */}
+        {parts.options.length >= 2 ? (
+          <>
+            <div className="grid gap-2 sm:hidden">
+              {parts.options.map((option, index) => {
+                const correct = isCorrectOption(option.label, question.correctAnswer);
+                return (
+                  <MobileOptionCard
+                    key={`${option.label}-${option.text}-m`}
+                    option={option}
+                    correct={correct}
+                    zebra={index % 2 === 1}
+                    readings={readings}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-lg border border-border/55 dark:border-white/8 sm:block">
+              <table className="w-full table-fixed border-collapse text-left text-sm">
+                <colgroup>
+                  <col className="w-14" />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-border/50 bg-muted/35">
+                    <th className="px-3.5 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                      No.
+                    </th>
+                    <th className="px-3.5 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                      表現
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parts.options.map((option, index) => {
+                    const correct = isCorrectOption(option.label, question.correctAnswer);
+                    const zebra = index % 2 === 1;
+                    return (
+                      <tr
+                        key={`${option.label}-${option.text}`}
+                        className={[
+                          "border-t border-border/40 transition-colors duration-150",
+                          optionRowClass(correct, zebra),
+                        ].join(" ")}
+                      >
+                        <td
+                          className={[
+                            "px-3.5 py-3 align-middle text-xs tabular-nums",
+                            correct
+                              ? "font-semibold text-emerald-700 dark:text-emerald-300"
+                              : "text-muted-foreground",
+                          ].join(" ")}
+                        >
+                          {option.label ? `${option.label}.` : "—"}
+                        </td>
+                        <td className="px-3.5 py-3 align-middle">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={[
+                                "font-serif text-[15px] leading-7 tracking-tight break-words",
+                                correct
+                                  ? "font-semibold text-emerald-950 dark:text-emerald-50"
+                                  : "font-medium text-foreground",
+                              ].join(" ")}
+                            >
+                              <FuriganaHover text={option.text || "—"} readings={readings} />
+                            </span>
+                            {correct ? <CorrectBadge /> : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+
+        {hasDetails ? (
           <div
             className={[
-              "overflow-hidden rounded-xl border transition-colors duration-300",
-              "border-stone-200 bg-stone-50",
-              "dark:border-neutral-800 dark:bg-[#161b22]",
+              parts.options.length >= 2 ? "mt-3" : "",
+              "overflow-hidden rounded-lg border border-dashed transition-colors duration-200",
+              detailsOpen
+                ? "border-sky-500/25 bg-sky-500/[0.05] dark:border-sky-400/20 dark:bg-sky-400/[0.06]"
+                : "border-border/55 bg-muted/25 dark:border-white/10 dark:bg-white/[0.025]",
             ].join(" ")}
           >
             <button
               type="button"
-              className={[
-                "flex min-h-12 w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors sm:min-h-0 sm:px-5",
-                "hover:bg-stone-100/80",
-                "dark:hover:bg-neutral-900/50",
-              ].join(" ")}
+              className="flex min-h-11 w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-all duration-200 hover:bg-black/[0.02] active:bg-black/[0.03] dark:hover:bg-white/[0.03] sm:min-h-0"
               aria-expanded={detailsOpen}
               aria-controls={panelId}
               onClick={() => setDetailsOpen((open) => !open)}
             >
               <span className="min-w-0">
-                <span className="block text-sm font-semibold tracking-tight text-stone-900 dark:text-neutral-100">
-                  Grammar explanation
+                <span className="block text-sm font-semibold tracking-tight text-foreground">
+                  Explanation & Distractors
                 </span>
-                <span
-                  lang="my"
-                  className="mt-0.5 block font-myanmar text-xs leading-5 text-stone-600 dark:text-neutral-400"
-                >
-                  သဒ္ဒါရှင်းလင်းချက်
+                <span lang="my" className="mt-0.5 block font-myanmar text-xs leading-5 text-muted-foreground">
+                  အသေးစိတ် ရှင်းလင်းချက် နှင့် မှားသော ရွေးချယ်မှုများ
                 </span>
               </span>
               <span
                 className={[
-                  "grid size-10 shrink-0 place-items-center rounded-lg border text-stone-500 transition-all duration-300 ease-out sm:size-8",
-                  "border-stone-200 bg-white",
-                  "dark:border-neutral-700 dark:bg-[#0d1117] dark:text-neutral-400",
+                  "grid size-8 shrink-0 place-items-center rounded-lg border border-border/60 bg-background/80 text-muted-foreground transition-all duration-200 dark:border-white/10",
                   detailsOpen
-                    ? "rotate-180 border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-400"
+                    ? "rotate-180 border-sky-500/30 text-sky-700 dark:border-sky-400/30 dark:text-sky-300"
                     : "",
                 ].join(" ")}
               >
@@ -217,77 +353,47 @@ export function GrammarQuestionCard({ question }: { question: GrammarQuestion })
               }`}
             >
               <div className="overflow-hidden">
-                <div
-                  className={[
-                    "space-y-4 border-t p-5",
-                    "border-stone-200",
-                    "dark:border-neutral-800",
-                  ].join(" ")}
-                >
+                <div className="space-y-2.5 border-t border-border/40 px-3.5 pt-3 pb-3.5 dark:border-white/8">
                   {question.correctReasonBurmese ? (
-                    <section
-                      className={[
-                        "rounded-xl border p-4",
-                        "border-emerald-200 bg-emerald-50/80",
-                        "dark:border-emerald-500/30 dark:bg-emerald-950/40",
-                      ].join(" ")}
-                    >
-                      <SectionHeader
-                        title="Correct reason"
-                        burmeseLabel="မှန်ကန်ရသည့်အကြောင်း"
-                        titleClass="text-emerald-700 dark:text-emerald-400"
-                        labelClass="text-emerald-800/70 dark:text-emerald-200/70"
+                    <section className="rounded-lg border border-border/50 bg-background/70 px-3.5 py-3 dark:border-white/8 dark:bg-black/15">
+                      <SectionLabel tone="sky">Explanation</SectionLabel>
+                      <ProseWithFurigana
+                        text={question.correctReasonBurmese}
+                        readings={readings}
+                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words text-muted-foreground"
                       />
-                      <p
-                        lang="my"
-                        className="font-myanmar text-sm leading-relaxed break-words whitespace-pre-wrap text-emerald-900 dark:text-emerald-100/90"
-                      >
-                        {question.correctReasonBurmese}
-                      </p>
                     </section>
                   ) : null}
 
-                  {question.incorrectReasonsBurmese ? (
-                    <section
-                      className={[
-                        "rounded-xl border p-4",
-                        "border-stone-200 bg-stone-50",
-                        "dark:border-neutral-800 dark:bg-neutral-900/60",
-                      ].join(" ")}
-                    >
-                      <SectionHeader
-                        title="Why others are wrong"
-                        burmeseLabel="အခြားရွေးချယ်မှုများ မမှန်ရခြင်း"
-                        titleClass="text-amber-800 dark:text-amber-400/90"
-                        labelClass="text-stone-600 dark:text-neutral-400"
-                      />
-                      <IncorrectOptionsBlock text={question.incorrectReasonsBurmese} />
+                  {distractors.length >= 2 ? (
+                    <section className="space-y-2">
+                      <SectionLabel tone="rose">Wrong options</SectionLabel>
+                      <div className="grid gap-2">
+                        {distractors.map((item) => (
+                          <DistractorCard
+                            key={`d-${item.option}-${item.pattern}-${item.body.slice(0, 20)}`}
+                            item={item}
+                            readings={readings}
+                          />
+                        ))}
+                      </div>
                     </section>
-                  ) : null}
-
-                  {question.syntaxBreakdown ? (
-                    <section
-                      className={[
-                        "rounded-xl border p-4",
-                        "border-indigo-100 bg-indigo-50/60",
-                        "dark:border-indigo-500/20 dark:bg-indigo-950/30",
-                      ].join(" ")}
-                    >
-                      <SectionHeader
-                        title="Syntax breakdown"
-                        burmeseLabel="ဝါကျဖွဲ့စည်းပုံ"
-                        titleClass="text-indigo-700 dark:text-indigo-400"
-                        labelClass="text-indigo-800/70 dark:text-indigo-200/60"
+                  ) : question.incorrectReasonsBurmese ? (
+                    <section className="rounded-lg border border-border/50 bg-background/70 px-3.5 py-3 dark:border-white/8 dark:bg-black/15">
+                      <SectionLabel tone="rose">Wrong options</SectionLabel>
+                      <ProseWithFurigana
+                        text={question.incorrectReasonsBurmese}
+                        readings={readings}
+                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words whitespace-pre-wrap text-muted-foreground"
                       />
-                      <SyntaxBlock text={question.syntaxBreakdown} />
                     </section>
                   ) : null}
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </article>
   );
 }

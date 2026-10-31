@@ -1,19 +1,19 @@
 import {
-  callJlptGenerateContent,
+  analyzeJlptExamPaper,
   cleanImageBase64,
   isGeminiAuthError,
   isGeminiBillingError,
   isNetworkOrTimeoutError,
-  isStructuredOutputError,
   jlptGeminiModelChain,
   normalizeImageMimeType,
-  questionsFromGemini,
   shouldTryNextJlptModel,
 } from "@/lib/gemini-jlpt";
 import type { JlptQuestion } from "@/src/constants/jlptPrompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Allow Mondai batch continuation on long exam pages (Vercel / Node hosts). */
+export const maxDuration = 300;
 
 /** Reject oversized uploads; client compresses JLPT photos well under this. */
 const MAX_BASE64_CHARS = 1_200_000;
@@ -141,68 +141,59 @@ export async function POST(request: Request) {
   let lastMessage = "Gemini did not respond. Check the key and try the photo again.";
 
   for (const modelName of models) {
-    for (const structured of [true, false]) {
-      const result = await callJlptGenerateContent({
-        apiKey: key,
+    const result = await analyzeJlptExamPaper({
+      apiKey: key,
+      model: modelName,
+      imageBase64: image.imageBase64,
+      mimeType: image.mimeType,
+    });
+
+    if (!result.ok) {
+      lastMessage = result.error;
+      console.error("[Gemini JLPT] attempt failed", {
         model: modelName,
-        imageBase64: image.imageBase64,
-        mimeType: image.mimeType,
-        structured,
+        kind: result.kind,
+        message: safeMessage(result.error),
       });
 
-      if (!result.ok) {
-        lastMessage = result.error;
-        console.error("[Gemini JLPT] attempt failed", {
-          model: modelName,
-          structured,
-          kind: result.kind,
-          message: safeMessage(result.error),
-        });
-
-        if (result.kind === "auth" || isGeminiAuthError(result.error)) {
-          return json(
-            {
-              ok: false,
-              error:
-                "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
-            },
-            502,
-          );
-        }
-        if (result.kind === "billing" || isGeminiBillingError(result.error)) {
-          return json(
-            {
-              ok: false,
-              error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
-            },
-            502,
-          );
-        }
-        if (result.kind === "timeout" || result.kind === "network" || isNetworkOrTimeoutError(result.error)) {
-          // Try the next model once network recovers / alternate endpoint path.
-          break;
-        }
-        if (structured && (result.kind === "parse" || isStructuredOutputError(result.error))) {
-          continue;
-        }
-        if (shouldTryNextJlptModel(result.error)) {
-          break;
-        }
-        return json({ ok: false, error: `Gemini could not analyze the paper. ${safeMessage(result.error)}` }, 502);
+      if (result.kind === "auth" || isGeminiAuthError(result.error)) {
+        return json(
+          {
+            ok: false,
+            error:
+              "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
+          },
+          502,
+        );
       }
-
-      const parsed = questionsFromGemini(result.payload);
-      const success: JlptAnalyzeSuccess = {
-        ok: true,
-        source: "gemini",
-        message: parsed.questions.length
-          ? `Extracted ${parsed.questions.length} Mondai 1–6 question${parsed.questions.length === 1 ? "" : "s"}.`
-          : "The photo was read, but no Mondai 1–6 questions were found.",
-        questions: parsed.questions,
-        rawText: parsed.rawText || result.rawText,
-      };
-      return json(success);
+      if (result.kind === "billing" || isGeminiBillingError(result.error)) {
+        return json(
+          {
+            ok: false,
+            error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
+          },
+          502,
+        );
+      }
+      if (result.kind === "timeout" || result.kind === "network" || isNetworkOrTimeoutError(result.error)) {
+        continue;
+      }
+      if (shouldTryNextJlptModel(result.error)) {
+        continue;
+      }
+      return json({ ok: false, error: `Gemini could not analyze the paper. ${safeMessage(result.error)}` }, 502);
     }
+
+    const success: JlptAnalyzeSuccess = {
+      ok: true,
+      source: "gemini",
+      message: result.questions.length
+        ? `Extracted ${result.questions.length} Mondai 1–6 question${result.questions.length === 1 ? "" : "s"}.`
+        : "The photo was read, but no Mondai 1–6 questions were found.",
+      questions: result.questions,
+      rawText: result.rawText,
+    };
+    return json(success);
   }
 
   const networkish = isNetworkOrTimeoutError(lastMessage);
