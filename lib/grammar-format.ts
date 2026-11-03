@@ -151,13 +151,13 @@ function parseOptionsBlob(blob: string): GrammarStemOption[] {
 
 /**
  * Markers that introduce a Japanese usage example after a Burmese reason.
- * Accepts correct ဥပမာ, Latin-p garbles (ဥpမာ), and 例 / 例文.
+ * Accepts correct ဥပမာ, Latin-p / Hebrew-pe garbles (ဥpမာ / ဥפမာ), and 例 / 例文.
  */
 const EXAMPLE_MARKER_RE =
-  /(?:\|\s*)?(?:ဥ[ပpP]မာ(?:\s*အသုံး)?|例(?:文)?)\s*[：:]\s*/u;
+  /(?:\|\s*)?(?:ဥ[ပpPפ]မာ(?:\s*အသုံး)?|例(?:文)?)\s*[：:]\s*/u;
 
 const EXAMPLE_ONLY_LINE_RE =
-  /^(?:ဥ[ပpP]မာ(?:\s*အသုံး)?|例(?:文)?)\s*[：:]\s*(.+)$/u;
+  /^(?:ဥ[ပpPפ]မာ(?:\s*အသုံး)?|例(?:文)?)\s*[：:]\s*(.+)$/u;
 
 /** Pull trailing example usage out of a distractor explanation body. */
 export function splitIncorrectReasonBody(raw: string): { body: string; example: string } {

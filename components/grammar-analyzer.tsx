@@ -3,10 +3,13 @@
 import { Camera, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { GrammarQuestionCard } from "@/components/grammar-question-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { fetchGrammarAnalyzeStatus, requestGrammarAnalyze } from "@/lib/client-grammar";
+import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
+import { requestGrammarAnalyze } from "@/lib/client-grammar";
+import { toast } from "sonner";
 import { fileToJpegBase64ForJlpt } from "@/lib/prepare-image";
 import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
@@ -48,15 +51,7 @@ export function GrammarAnalyzer() {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<GrammarQuestion[]>([]);
-  const [geminiReady, setGeminiReady] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchGrammarAnalyzeStatus(controller.signal)
-      .then(setGeminiReady)
-      .catch(() => setGeminiReady(false));
-    return () => controller.abort();
-  }, []);
+  const geminiReady = useGeminiStatus();
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -90,11 +85,13 @@ export function GrammarAnalyzer() {
     const controller = new AbortController();
     abortRef.current = controller;
     setError(null);
+    setQuestions([]);
     setAnalyzing(true);
     try {
       const result = await requestGrammarAnalyze(prepared.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setQuestions(result.questions);
+      if (result.source === "cache") toast.message("Loaded from cache");
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
       setQuestions([]);
@@ -125,12 +122,7 @@ export function GrammarAnalyzer() {
       </header>
 
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:space-y-5 sm:px-6 sm:pt-7">
-        {geminiReady === false ? (
-          <p className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-6">
-            No Gemini API key is set. Add <code className="text-xs">GEMINI_API_KEY</code> to{" "}
-            <code className="text-xs">.env.local</code>, then restart the dev server.
-          </p>
-        ) : null}
+        <GeminiKeyNotice />
 
         <section
           className={[
@@ -217,7 +209,7 @@ export function GrammarAnalyzer() {
             <button
               type="button"
               className={btnAnalyze}
-              disabled={!prepared || analyzing || geminiReady === false}
+              disabled={!prepared || analyzing || geminiReady !== true}
               onClick={() => void analyze()}
             >
               {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
@@ -250,6 +242,10 @@ export function GrammarAnalyzer() {
           }}
         />
 
+        {analyzing && !hasResults ? (
+          <AnalysisSkeleton label="Reading the grammar page…" cards={3} />
+        ) : null}
+
         {hasResults ? (
           <section className="space-y-3 sm:space-y-4">
             <div className="min-w-0">
@@ -272,6 +268,7 @@ export function GrammarAnalyzer() {
           </section>
         ) : null}
       </main>
+
     </div>
   );
 }

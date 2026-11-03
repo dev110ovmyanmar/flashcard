@@ -1,3 +1,4 @@
+import { getAnalysisCache, setAnalysisCache } from "@/lib/analysis-cache";
 import type { OcrSuccess } from "@/lib/types";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,6 +21,17 @@ export async function requestOcr(
   mimeType: string,
   signal?: AbortSignal,
 ): Promise<OcrSuccess> {
+  const material = `${mimeType}:${imageBase64}`;
+  const cached = await getAnalysisCache<OcrSuccess>("ocr", material);
+  if (cached && Array.isArray(cached.rows)) {
+    return {
+      ...cached,
+      ok: true,
+      source: cached.source === "mock" ? "mock" : "gemini",
+      message: cached.message ? `${cached.message} (cached)` : "Loaded from cache.",
+    };
+  }
+
   const response = await fetch("/api/ocr", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -40,6 +52,7 @@ export async function requestOcr(
     throw new Error(message);
   }
 
+  void setAnalysisCache("ocr", material, data);
   return data;
 }
 

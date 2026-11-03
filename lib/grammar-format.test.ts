@@ -76,6 +76,14 @@ describe("splitIncorrectReasonBody", () => {
     assert.equal(split.example, "電車が遅れたせいで遅刻した。");
   });
 
+  it("splits garbled ဥפမာ marker (Hebrew pe) like Latin-p", () => {
+    const split = splitIncorrectReasonBody(
+      "အကြောင်းရင်းကို ပြသည်။ ဥפမာ: 電車が遅れたせいで遅刻した。",
+    );
+    assert.match(split.body, /အကြောင်းရင်း/);
+    assert.equal(split.example, "電車が遅れたせいで遅刻した。");
+  });
+
   it("splits 例: marker preferred by the model prompt", () => {
     const split = splitIncorrectReasonBody(
       "မကိုက်ညီ။ 例: 電車《でんしゃ》が遅《おく》れたせいで遅刻《ちこく》した。",
@@ -96,6 +104,16 @@ describe("parseIncorrectReasonItems orphan examples", () => {
   it("attaches a wrapped ဥpမာ line to the previous option", () => {
     const items = parseIncorrectReasonItems(
       "3 せいで《せいで》: အကြောင်းရင်းကို ပြသည်။\nဥpမာ: 電車が遅れたせいで遅刻した。",
+    );
+    assert.equal(items.length, 1);
+    assert.equal(items[0]?.option, "3");
+    assert.match(items[0]?.body ?? "", /အကြောင်းရင်း/);
+    assert.equal(items[0]?.example, "電車が遅れたせいで遅刻した。");
+  });
+
+  it("attaches a wrapped ဥפမာ line (Hebrew pe) to the previous option", () => {
+    const items = parseIncorrectReasonItems(
+      "3 せいで《せいで》: အကြောင်းရင်းကို ပြသည်။\nဥפမာ: 電車が遅れたせいで遅刻した。",
     );
     assert.equal(items.length, 1);
     assert.equal(items[0]?.option, "3");

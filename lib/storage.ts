@@ -9,7 +9,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function asSource(value: unknown): DeckSource {
-  if (value === "sample" || value === "scan" || value === "manual" || value === "jlpt") return value;
+  if (
+    value === "sample" ||
+    value === "scan" ||
+    value === "manual" ||
+    value === "jlpt" ||
+    value === "script"
+  ) {
+    return value;
+  }
   return "manual";
 }
 

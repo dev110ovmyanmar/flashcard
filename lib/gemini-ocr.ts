@@ -1,3 +1,4 @@
+import { stripForeignGlosses } from "@/lib/clean-burmese";
 import { parseVocabLine, parseVocabLines } from "@/lib/parse-vocab";
 import type { ParsedRow } from "@/lib/types";
 
@@ -14,7 +15,7 @@ export const GEMINI_FALLBACK_MODELS = [
 
 const PROMPT = `Read this Japanese vocabulary page from top to bottom.
 Each row is a headword (keep okurigana, for example 申し込む), a hiragana or katakana reading, and a clear Myanmar (Burmese) meaning.
-Use natural Burmese only — no English mixed into the meaning.
+Use natural Burmese (Myanmar) only — no English, Thai (e.g. สัปดาห์ / သัปတ), Korean, Khmer, or other languages in the meaning.
 Skip titles, numbers, and headers.
 Return {"rows":[{"kanji":"","reading":"","meaning":""}]}.
 Do not invent words. Use an empty string for an unreadable field.`;
@@ -317,7 +318,7 @@ function tidyRow(value: unknown): ParsedRow | null {
   if (!isRecord(value)) return null;
   const kanji = field(value, ["kanji", "headword", "word", "term"]);
   const reading = field(value, ["reading", "hiragana", "yomi", "pronunciation"]);
-  const meaning = field(value, ["meaning", "myanmar", "translation", "definition"]);
+  const meaning = stripForeignGlosses(field(value, ["meaning", "myanmar", "translation", "definition"]));
   let row: ParsedRow = {
     kanji: clip(kanji, 40),
     reading: clip(reading, 60),

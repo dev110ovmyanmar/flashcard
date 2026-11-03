@@ -144,6 +144,44 @@
   }
 }
 
+/* Soft cross-fade for browsers with same-document view transitions */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 160ms ease-in both sumi-vt-fade-out;
+}
+
+::view-transition-new(root) {
+  animation: 220ms ease-out 40ms both sumi-vt-fade-in;
+}
+
+@keyframes sumi-vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sumi-vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+@keyframes sumi-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .glass {
   background: color-mix(in oklab, var(--card) 76%, transparent);
   backdrop-filter: blur(18px);

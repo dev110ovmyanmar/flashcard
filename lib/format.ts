@@ -25,6 +25,7 @@ export function sourceLabel(deck: Deck): string {
   if (deck.source === "sample") return "Sample";
   if (deck.source === "manual") return "Typed";
   if (deck.source === "jlpt") return "Goi";
+  if (deck.source === "script") return "Script";
   if (deck.scanMode === "mock") return "Practice scan";
   return "Scanned";
 }

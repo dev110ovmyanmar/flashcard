@@ -1,8 +1,9 @@
+import { getAnalysisCache, setAnalysisCache } from "@/lib/analysis-cache";
 import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
 export type GrammarAnalyzeSuccess = {
   ok: true;
-  source: "gemini";
+  source: "gemini" | "cache";
   message: string;
   questions: GrammarQuestion[];
   rawText: string;
@@ -16,7 +17,7 @@ function isSuccess(value: unknown): value is GrammarAnalyzeSuccess {
   return (
     isRecord(value) &&
     value.ok === true &&
-    value.source === "gemini" &&
+    (value.source === "gemini" || value.source === "cache") &&
     typeof value.message === "string" &&
     Array.isArray(value.questions) &&
     typeof value.rawText === "string"
@@ -29,6 +30,17 @@ export async function requestGrammarAnalyze(
   mimeType: string,
   signal?: AbortSignal,
 ): Promise<GrammarAnalyzeSuccess> {
+  const material = `${mimeType}:${imageBase64}`;
+  const cached = await getAnalysisCache<GrammarAnalyzeSuccess>("grammar", material);
+  if (cached && Array.isArray(cached.questions)) {
+    return {
+      ...cached,
+      ok: true,
+      source: "cache",
+      message: cached.message || "Loaded from cache.",
+    };
+  }
+
   const decoded = atob(imageBase64);
   const bytes = new Uint8Array(decoded.length);
   for (let i = 0; i < decoded.length; i += 1) bytes[i] = decoded.charCodeAt(i);
@@ -57,7 +69,12 @@ export async function requestGrammarAnalyze(
     throw new Error(message);
   }
 
-  return data;
+  const result: GrammarAnalyzeSuccess = {
+    ...data,
+    source: "gemini",
+  };
+  void setAnalysisCache("grammar", material, result);
+  return result;
 }
 
 export async function fetchGrammarAnalyzeStatus(signal?: AbortSignal): Promise<boolean> {

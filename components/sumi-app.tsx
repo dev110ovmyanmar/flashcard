@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { DeckLibrary } from "@/components/deck-library";
 import { DeskFallback } from "@/components/desk-fallback";
@@ -10,11 +10,19 @@ import { ScanDialog, type ScanDialogHandle } from "@/components/scan-dialog";
 import { SiteHeader } from "@/components/site-header";
 import { StudySession } from "@/components/study-session";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useDecks } from "@/hooks/use-decks";
-import { fetchOcrStatus } from "@/lib/client-ocr";
+import { downloadGoiBackup, readBackupFile } from "@/lib/backup";
 import { blankRows, createDeck, mergeDeck, withIds } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
-import type { Card, DeckSource, OcrSuccess, ScanMode, VocabRow } from "@/lib/types";
+import type { Card, DeckSource, OcrSuccess, PersistedState, ScanMode, VocabRow } from "@/lib/types";
 
 type ReviewState = {
   mode: "create" | "edit";
@@ -45,16 +53,9 @@ export function SumiApp() {
   const [scanOpen, setScanOpen] = useState(false);
   const scanRef = useRef<ScanDialogHandle>(null);
   const [review, setReview] = useState<ReviewState | null>(null);
-  const [geminiReady, setGeminiReady] = useState<boolean | null>(null);
+  const [pendingImport, setPendingImport] = useState<PersistedState | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchOcrStatus(controller.signal)
-      .then(setGeminiReady)
-      .catch(() => setGeminiReady(false));
-    return () => controller.abort();
-  }, []);
-
+  const onDesk = !deckId;
   const active = decks?.find((deck) => deck.id === deckId) ?? null;
 
   function openStudy(id: string) {
@@ -147,11 +148,34 @@ export function SumiApp() {
     restoreCard(active.id, card);
   }
 
+  function exportBackup() {
+    try {
+      downloadGoiBackup();
+      toast.success("Goi backup downloaded");
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Couldn't export the backup.");
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    try {
+      const state = await readBackupFile(file);
+      setPendingImport(state);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "Couldn't read that backup.");
+    }
+  }
+
   if (!ready || !decks) return <DeskFallback />;
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <SiteHeader title={active?.name} onBack={deckId ? closeStudy : undefined} />
+      <SiteHeader
+        title={active?.name}
+        onBack={deckId ? closeStudy : undefined}
+        onExportBackup={onDesk ? exportBackup : undefined}
+        onImportBackupFile={onDesk ? handleImportFile : undefined}
+      />
       {corrupt ? (
         <div className="mx-auto mt-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-destructive/30 bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p className="text-sm">Saved decks could not be read in this browser.</p>
@@ -174,7 +198,6 @@ export function SumiApp() {
       ) : (
         <DeckLibrary
           decks={decks}
-          geminiConfigured={geminiReady}
           onScan={openScan}
           onType={openManual}
           onFile={(file) => {
@@ -184,14 +207,12 @@ export function SumiApp() {
           onStudy={openStudy}
           onEdit={(deck) => openEdit(deck.id)}
           onDelete={deleteDeck}
-          onImportBackup={(state) => replaceDecks(state.decks)}
         />
       )}
 
       <ScanDialog
         ref={scanRef}
         open={scanOpen}
-        geminiConfigured={geminiReady}
         onOpenChange={setScanOpen}
         onResult={handleScanResult}
       />
@@ -214,6 +235,36 @@ export function SumiApp() {
         }}
         onSave={handleSave}
       />
+
+      <Dialog open={Boolean(pendingImport)} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <DialogContent>
+          <DialogHeader className="text-left">
+            <DialogTitle>Restore Goi backup?</DialogTitle>
+            <DialogDescription>
+              This replaces all decks currently saved in this browser with{" "}
+              {pendingImport ? pendingImport.decks.length : 0} deck
+              {pendingImport?.decks.length === 1 ? "" : "s"} from the JSON file.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-xl" onClick={() => setPendingImport(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl"
+              onClick={() => {
+                if (!pendingImport) return;
+                replaceDecks(pendingImport.decks);
+                setPendingImport(null);
+                toast.success("Goi backup restored");
+              }}
+            >
+              Replace & restore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

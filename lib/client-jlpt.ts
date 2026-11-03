@@ -1,8 +1,9 @@
+import { getAnalysisCache, setAnalysisCache } from "@/lib/analysis-cache";
 import type { JlptQuestion } from "@/src/constants/jlptPrompt";
 
 export type JlptAnalyzeSuccess = {
   ok: true;
-  source: "gemini";
+  source: "gemini" | "cache";
   message: string;
   questions: JlptQuestion[];
   rawText: string;
@@ -16,7 +17,7 @@ function isSuccess(value: unknown): value is JlptAnalyzeSuccess {
   return (
     isRecord(value) &&
     value.ok === true &&
-    value.source === "gemini" &&
+    (value.source === "gemini" || value.source === "cache") &&
     typeof value.message === "string" &&
     Array.isArray(value.questions) &&
     typeof value.rawText === "string"
@@ -28,6 +29,17 @@ export async function requestJlptAnalyze(
   mimeType: string,
   signal?: AbortSignal,
 ): Promise<JlptAnalyzeSuccess> {
+  const material = `${mimeType}:${imageBase64}`;
+  const cached = await getAnalysisCache<JlptAnalyzeSuccess>("jlpt", material);
+  if (cached && Array.isArray(cached.questions)) {
+    return {
+      ...cached,
+      ok: true,
+      source: "cache",
+      message: cached.message || "Loaded from cache.",
+    };
+  }
+
   const response = await fetch("/api/analyze-jlpt", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -50,7 +62,12 @@ export async function requestJlptAnalyze(
     throw new Error(message);
   }
 
-  return data;
+  const result: JlptAnalyzeSuccess = {
+    ...data,
+    source: "gemini",
+  };
+  void setAnalysisCache("jlpt", material, result);
+  return result;
 }
 
 export async function fetchJlptAnalyzeStatus(signal?: AbortSignal): Promise<boolean> {

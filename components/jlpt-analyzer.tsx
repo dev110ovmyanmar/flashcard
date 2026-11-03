@@ -4,12 +4,14 @@ import { BookmarkPlus, Camera, ImagePlus, Library, Loader2, Sparkles, X } from "
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { GoiDrawer } from "@/components/goi-drawer";
 import { JlptQuestionCard } from "@/components/jlpt-question-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useDecks } from "@/hooks/use-decks";
-import { fetchJlptAnalyzeStatus, requestJlptAnalyze } from "@/lib/client-jlpt";
+import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
+import { requestJlptAnalyze } from "@/lib/client-jlpt";
 import { createDeck } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
 import { jlptQuestionsToVocabRows } from "@/lib/jlpt-to-goi";
@@ -81,15 +83,7 @@ export function JlptAnalyzer() {
   const [goiOpen, setGoiOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [questions, setQuestions] = useState<JlptQuestion[]>([]);
-  const [geminiReady, setGeminiReady] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchJlptAnalyzeStatus(controller.signal)
-      .then(setGeminiReady)
-      .catch(() => setGeminiReady(false));
-    return () => controller.abort();
-  }, []);
+  const geminiReady = useGeminiStatus();
 
   useEffect(() => {
     return () => abortRef.current?.abort();
@@ -123,11 +117,13 @@ export function JlptAnalyzer() {
     const controller = new AbortController();
     abortRef.current = controller;
     setError(null);
+    setQuestions([]);
     setAnalyzing(true);
     try {
       const result = await requestJlptAnalyze(prepared.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setQuestions(result.questions);
+      if (result.source === "cache") toast.message("Loaded from cache");
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
       setQuestions([]);
@@ -181,12 +177,7 @@ export function JlptAnalyzer() {
       </header>
 
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:space-y-5 sm:px-6 sm:pt-7">
-        {geminiReady === false ? (
-          <p className="rounded-xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-6">
-            No Gemini API key is set. Add <code className="text-xs">GEMINI_API_KEY</code> to{" "}
-            <code className="text-xs">.env.local</code>, then restart the dev server.
-          </p>
-        ) : null}
+        <GeminiKeyNotice />
 
         <section
           className={[
@@ -273,7 +264,7 @@ export function JlptAnalyzer() {
             <button
               type="button"
               className={btnAnalyze}
-              disabled={!prepared || analyzing || geminiReady === false}
+              disabled={!prepared || analyzing || geminiReady !== true}
               onClick={() => void analyze()}
             >
               {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
@@ -305,6 +296,10 @@ export function JlptAnalyzer() {
             event.target.value = "";
           }}
         />
+
+        {analyzing && !hasResults ? (
+          <AnalysisSkeleton label="Reading the vocabulary page…" cards={3} />
+        ) : null}
 
         {hasResults ? (
           <section className="space-y-3 sm:space-y-4">

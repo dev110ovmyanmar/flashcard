@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestOcr } from "@/lib/client-ocr";
 import { fileToJpegBase64 } from "@/lib/prepare-image";
 import type { OcrSuccess } from "@/lib/types";
@@ -29,16 +30,15 @@ const actionSecondary =
 export function ScanDialog({
   ref,
   open,
-  geminiConfigured,
   onOpenChange,
   onResult,
 }: {
   ref?: React.Ref<ScanDialogHandle>;
   open: boolean;
-  geminiConfigured: boolean | null;
   onOpenChange: (open: boolean) => void;
   onResult: (result: OcrSuccess) => void;
 }) {
+  const geminiConfigured = useGeminiStatus();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -86,7 +86,7 @@ export function ScanDialog({
 
   function takeFiles(list: FileList | null) {
     const file = list?.[0];
-    if (!file) return;
+    if (!file || reading) return;
     onResultRef.current = onResult;
     void readFile(file);
   }
@@ -105,7 +105,15 @@ export function ScanDialog({
           <DialogDescription>Upload a textbook page photo.</DialogDescription>
         </DialogHeader>
 
-        {geminiConfigured === false ? (
+        {geminiConfigured === null ? (
+          <p
+            className="flex items-center gap-2 rounded-xl border border-border/50 bg-muted/20 px-3.5 py-2.5 text-sm text-muted-foreground"
+            role="status"
+          >
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            Checking AI setup…
+          </p>
+        ) : geminiConfigured === false ? (
           <p className="rounded-xl border border-primary/25 bg-primary/10 px-3.5 py-2.5 text-sm leading-5">
             No API key set — a practice page will open instead.
           </p>
