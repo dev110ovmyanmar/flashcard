@@ -27,6 +27,14 @@ export const GRAMMAR_GEMINI_FALLBACK_MODELS = [
 
 const REQUEST_TIMEOUT_MS = 45_000;
 
+/** Cap for pasted grammar / ★ question text (characters). */
+export const GRAMMAR_MAX_TEXT_CHARS = 28_000;
+
+/** Normalize pasted grammar question text for analysis. */
+export function normalizeGrammarTextInput(raw: string): string {
+  return raw.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim().slice(0, GRAMMAR_MAX_TEXT_CHARS);
+}
+
 /** Structured JSON schema for grammar question explanations. */
 export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -97,21 +105,28 @@ export { cleanImageBase64, normalizeImageMimeType };
 export async function callGrammarGenerateContent(options: {
   apiKey: string;
   model: string;
-  imageBase64: string;
-  mimeType: string;
+  imageBase64?: string;
+  mimeType?: string;
+  textInput?: string;
   structured?: boolean;
 }): Promise<GrammarGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, structured = true } = options;
-  const data = cleanImageBase64(imageBase64);
-  const normalizedMime = normalizeImageMimeType(mimeType);
+  const { apiKey, model, structured = true } = options;
+  const textInput = options.textInput ? normalizeGrammarTextInput(options.textInput) : "";
+  const imageBase64 = options.imageBase64 ? cleanImageBase64(options.imageBase64) : "";
+  const normalizedMime = normalizeImageMimeType(options.mimeType || "image/jpeg");
+
+  if (!textInput && !imageBase64) {
+    return { ok: false, error: "Paste text or choose a photo first.", model, kind: "parse" };
+  }
 
   console.info(
     "[Gemini Grammar] request",
     JSON.stringify({
       model,
       structured,
-      mimeType: normalizedMime,
-      base64Chars: data.length,
+      mimeType: imageBase64 ? normalizedMime : undefined,
+      base64Chars: imageBase64.length || undefined,
+      textChars: textInput.length || undefined,
       timeoutMs: REQUEST_TIMEOUT_MS,
       apiKeyPresent: Boolean(apiKey),
     }),
@@ -119,21 +134,30 @@ export async function callGrammarGenerateContent(options: {
 
   const ai = new GoogleGenAI({ apiKey });
 
+  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
+    { text: JLPT_GRAMMAR_SYSTEM_PROMPT },
+  ];
+
+  if (textInput) {
+    parts.push({
+      text: `次のテキストはJLPT文法問題（★星印問題を含む）です。画像ではなくテキストとして読み取り、指定のJSONに構造化してください。\n\n---\n${textInput}\n---`,
+    });
+  } else {
+    parts.push({
+      inlineData: {
+        mimeType: normalizedMime,
+        data: imageBase64,
+      },
+    });
+  }
+
   try {
     const response = await ai.models.generateContent({
       model,
       contents: [
         {
           role: "user",
-          parts: [
-            { text: JLPT_GRAMMAR_SYSTEM_PROMPT },
-            {
-              inlineData: {
-                mimeType: normalizedMime,
-                data,
-              },
-            },
-          ],
+          parts,
         },
       ],
       config: {

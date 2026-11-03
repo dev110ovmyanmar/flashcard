@@ -109,6 +109,19 @@ test("builds REST inline_data image parts with cleaned base64 and jpeg mime", ()
   assert.ok("responseSchema" in body.generationConfig && body.generationConfig.responseSchema);
 });
 
+test("builds text-only JLPT body when textInput is provided", () => {
+  const body = buildJlptGenerateContentBody("", "image/jpeg", {
+    textInput: "問題4\n1 彼の話は_____。",
+  });
+  const textPart = body.contents[0]?.parts[1];
+  assert.ok(textPart && "text" in textPart);
+  assert.match(textPart.text, /問題4/);
+  assert.equal(
+    body.contents[0]?.parts.some((part) => "inline_data" in part),
+    false,
+  );
+});
+
 test("legacy SDK-shaped parts helper still normalizes mime", () => {
   const parts = buildJlptImageParts("data:image/jpg;base64,YWJjZA==\n", "image/jpg");
   assert.equal(parts[1].inlineData.mimeType, "image/jpeg");

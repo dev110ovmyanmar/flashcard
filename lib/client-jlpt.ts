@@ -24,6 +24,28 @@ function isSuccess(value: unknown): value is JlptAnalyzeSuccess {
   );
 }
 
+async function parseAnalyzeResponse(response: Response): Promise<JlptAnalyzeSuccess> {
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || !isSuccess(data)) {
+    const message =
+      isRecord(data) && typeof data.error === "string"
+        ? data.error
+        : "The exam paper couldn't be analyzed.";
+    throw new Error(message);
+  }
+
+  return {
+    ...data,
+    source: "gemini",
+  };
+}
+
 export async function requestJlptAnalyze(
   imageBase64: string,
   mimeType: string,
@@ -47,25 +69,34 @@ export async function requestJlptAnalyze(
     signal,
   });
 
-  let data: unknown = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
+  const result = await parseAnalyzeResponse(response);
+  void setAnalysisCache("jlpt", material, result);
+  return result;
+}
+
+export async function requestJlptAnalyzeText(
+  textInput: string,
+  signal?: AbortSignal,
+): Promise<JlptAnalyzeSuccess> {
+  const material = `text:${textInput.trim()}`;
+  const cached = await getAnalysisCache<JlptAnalyzeSuccess>("jlpt", material);
+  if (cached && Array.isArray(cached.questions)) {
+    return {
+      ...cached,
+      ok: true,
+      source: "cache",
+      message: cached.message || "Loaded from cache.",
+    };
   }
 
-  if (!response.ok || !isSuccess(data)) {
-    const message =
-      isRecord(data) && typeof data.error === "string"
-        ? data.error
-        : "The exam paper couldn't be analyzed.";
-    throw new Error(message);
-  }
+  const response = await fetch("/api/analyze-jlpt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ textInput }),
+    signal,
+  });
 
-  const result: JlptAnalyzeSuccess = {
-    ...data,
-    source: "gemini",
-  };
+  const result = await parseAnalyzeResponse(response);
   void setAnalysisCache("jlpt", material, result);
   return result;
 }

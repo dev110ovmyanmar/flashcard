@@ -24,6 +24,28 @@ function isSuccess(value: unknown): value is GrammarAnalyzeSuccess {
   );
 }
 
+async function parseAnalyzeResponse(response: Response): Promise<GrammarAnalyzeSuccess> {
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || !isSuccess(data)) {
+    const message =
+      isRecord(data) && typeof data.error === "string"
+        ? data.error
+        : "The grammar page couldn't be analyzed.";
+    throw new Error(message);
+  }
+
+  return {
+    ...data,
+    source: "gemini",
+  };
+}
+
 /** Upload a prepared JPEG as multipart FormData (preferred by the grammar API). */
 export async function requestGrammarAnalyze(
   imageBase64: string,
@@ -54,25 +76,34 @@ export async function requestGrammarAnalyze(
     signal,
   });
 
-  let data: unknown = null;
-  try {
-    data = await response.json();
-  } catch {
-    data = null;
+  const result = await parseAnalyzeResponse(response);
+  void setAnalysisCache("grammar", material, result);
+  return result;
+}
+
+export async function requestGrammarAnalyzeText(
+  textInput: string,
+  signal?: AbortSignal,
+): Promise<GrammarAnalyzeSuccess> {
+  const material = `text:${textInput.trim()}`;
+  const cached = await getAnalysisCache<GrammarAnalyzeSuccess>("grammar", material);
+  if (cached && Array.isArray(cached.questions)) {
+    return {
+      ...cached,
+      ok: true,
+      source: "cache",
+      message: cached.message || "Loaded from cache.",
+    };
   }
 
-  if (!response.ok || !isSuccess(data)) {
-    const message =
-      isRecord(data) && typeof data.error === "string"
-        ? data.error
-        : "The grammar page couldn't be analyzed.";
-    throw new Error(message);
-  }
+  const response = await fetch("/api/analyze-grammar", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ textInput }),
+    signal,
+  });
 
-  const result: GrammarAnalyzeSuccess = {
-    ...data,
-    source: "gemini",
-  };
+  const result = await parseAnalyzeResponse(response);
   void setAnalysisCache("grammar", material, result);
   return result;
 }

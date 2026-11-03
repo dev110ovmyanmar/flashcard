@@ -2,10 +2,12 @@ import {
   callGrammarGenerateContent,
   cleanImageBase64,
   grammarGeminiModelChain,
+  GRAMMAR_MAX_TEXT_CHARS,
   isGeminiAuthError,
   isGeminiBillingError,
   isNetworkOrTimeoutError,
   isStructuredOutputError,
+  normalizeGrammarTextInput,
   normalizeImageMimeType,
   questionsFromGrammarGemini,
   shouldTryNextGrammarModel,
@@ -31,6 +33,10 @@ export type GrammarAnalyzeFailure = {
   error: string;
 };
 
+type GrammarInput =
+  | { kind: "image"; imageBase64: string; mimeType: string }
+  | { kind: "text"; textInput: string };
+
 function geminiKey(): string | null {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const trimmed = key?.trim();
@@ -45,10 +51,38 @@ function safeMessage(message: string): string {
   return message.replace(/key=[^&\s]+/gi, "key=…").slice(0, 400);
 }
 
-async function readImageFromRequest(request: Request): Promise<
-  | { ok: true; imageBase64: string; mimeType: string }
-  | { ok: false; error: string; status: number }
-> {
+function validateImageBase64(
+  imageBase64: string,
+  mimeTypeRaw: string,
+): GrammarInput | { error: string; status: number } {
+  const mimeType = normalizeImageMimeType(mimeTypeRaw || "image/jpeg");
+  if (!mimeType.startsWith("image/")) {
+    return { error: "That file isn't an image.", status: 415 };
+  }
+  const cleaned = cleanImageBase64(imageBase64);
+  if (!/^[A-Za-z0-9+/]+=*$/.test(cleaned)) {
+    return { error: "The photo data was unreadable.", status: 400 };
+  }
+  if (cleaned.length > MAX_BASE64_CHARS) {
+    return { error: "That photo is too large. Try a closer crop.", status: 413 };
+  }
+  return { kind: "image", imageBase64: cleaned, mimeType };
+}
+
+function validateTextInput(raw: string): GrammarInput | { error: string; status: number } {
+  const textInput = normalizeGrammarTextInput(raw);
+  if (!textInput) {
+    return { error: "Paste some Japanese text first.", status: 400 };
+  }
+  if (textInput.length > GRAMMAR_MAX_TEXT_CHARS) {
+    return { error: "That text is too long. Paste a shorter section.", status: 413 };
+  }
+  return { kind: "text", textInput };
+}
+
+async function readInputFromRequest(
+  request: Request,
+): Promise<{ ok: true; input: GrammarInput } | { ok: false; error: string; status: number }> {
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
@@ -59,58 +93,67 @@ async function readImageFromRequest(request: Request): Promise<
       return { ok: false, error: "Could not read the uploaded file.", status: 400 };
     }
 
+    const rawText = form.get("textInput") ?? form.get("text");
+    if (typeof rawText === "string" && rawText.trim()) {
+      const checked = validateTextInput(rawText);
+      if ("error" in checked) return { ok: false, error: checked.error, status: checked.status };
+      return { ok: true, input: checked };
+    }
+
     const file = form.get("image") ?? form.get("file") ?? form.get("photo");
     if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Choose a photo first.", status: 400 };
+      return { ok: false, error: "Choose a photo or paste text first.", status: 400 };
     }
     if (!file.type.startsWith("image/")) {
       return { ok: false, error: "That file isn't an image.", status: 415 };
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const imageBase64 = buffer.toString("base64");
-    if (imageBase64.length > MAX_BASE64_CHARS) {
-      return { ok: false, error: "That photo is too large. Try a closer crop.", status: 413 };
-    }
-    return {
-      ok: true,
-      imageBase64,
-      mimeType: normalizeImageMimeType(file.type || "image/jpeg"),
-    };
+    const checked = validateImageBase64(buffer.toString("base64"), file.type || "image/jpeg");
+    if ("error" in checked) return { ok: false, error: checked.error, status: checked.status };
+    return { ok: true, input: checked };
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return { ok: false, error: "Send the photo as FormData or JSON.", status: 400 };
+    return { ok: false, error: "Send the photo or text as FormData or JSON.", status: 400 };
   }
 
   if (typeof body !== "object" || body === null) {
-    return { ok: false, error: "Send the photo as FormData or JSON.", status: 400 };
+    return { ok: false, error: "Send the photo or text as FormData or JSON.", status: 400 };
   }
 
-  const record = body as { imageBase64?: unknown; mimeType?: unknown };
+  const record = body as {
+    imageBase64?: unknown;
+    mimeType?: unknown;
+    textInput?: unknown;
+    text?: unknown;
+  };
+
+  if (typeof record.textInput === "string" && record.textInput.trim()) {
+    const checked = validateTextInput(record.textInput);
+    if ("error" in checked) return { ok: false, error: checked.error, status: checked.status };
+    return { ok: true, input: checked };
+  }
+
+  if (typeof record.text === "string" && record.text.trim()) {
+    const checked = validateTextInput(record.text);
+    if ("error" in checked) return { ok: false, error: checked.error, status: checked.status };
+    return { ok: true, input: checked };
+  }
+
   if (typeof record.imageBase64 !== "string" || record.imageBase64.trim().length === 0) {
-    return { ok: false, error: "Choose a photo first.", status: 400 };
+    return { ok: false, error: "Choose a photo or paste text first.", status: 400 };
   }
 
-  const mimeType = normalizeImageMimeType(
+  const checked = validateImageBase64(
+    record.imageBase64,
     typeof record.mimeType === "string" ? record.mimeType : "image/jpeg",
   );
-  if (!mimeType.startsWith("image/")) {
-    return { ok: false, error: "That file isn't an image.", status: 415 };
-  }
-
-  const imageBase64 = cleanImageBase64(record.imageBase64);
-  if (!/^[A-Za-z0-9+/]+=*$/.test(imageBase64)) {
-    return { ok: false, error: "The photo data was unreadable.", status: 400 };
-  }
-  if (imageBase64.length > MAX_BASE64_CHARS) {
-    return { ok: false, error: "That photo is too large. Try a closer crop.", status: 413 };
-  }
-
-  return { ok: true, imageBase64, mimeType };
+  if ("error" in checked) return { ok: false, error: checked.error, status: checked.status };
+  return { ok: true, input: checked };
 }
 
 export async function GET() {
@@ -118,9 +161,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const image = await readImageFromRequest(request);
-  if (!image.ok) {
-    return json({ ok: false, error: image.error }, image.status);
+  const parsed = await readInputFromRequest(request);
+  if (!parsed.ok) {
+    return json({ ok: false, error: parsed.error }, parsed.status);
   }
 
   const key = geminiKey();
@@ -135,19 +178,24 @@ export async function POST(request: Request) {
     );
   }
 
-  console.info("[Gemini Grammar] API key loaded", { length: key.length, prefix: `${key.slice(0, 4)}…` });
+  console.info("[Gemini Grammar] API key loaded", {
+    length: key.length,
+    prefix: `${key.slice(0, 4)}…`,
+    inputKind: parsed.input.kind,
+  });
 
   const models = grammarGeminiModelChain(process.env.GEMINI_MODEL || process.env.GRAMMAR_GEMINI_MODEL);
-  let lastMessage = "Gemini did not respond. Check the key and try the photo again.";
+  let lastMessage = "Gemini did not respond. Check the key and try again.";
 
   for (const modelName of models) {
     for (const structured of [true, false]) {
       const result = await callGrammarGenerateContent({
         apiKey: key,
         model: modelName,
-        imageBase64: image.imageBase64,
-        mimeType: image.mimeType,
         structured,
+        ...(parsed.input.kind === "text"
+          ? { textInput: parsed.input.textInput }
+          : { imageBase64: parsed.input.imageBase64, mimeType: parsed.input.mimeType }),
       });
 
       if (!result.ok) {
@@ -193,15 +241,17 @@ export async function POST(request: Request) {
         );
       }
 
-      const parsed = questionsFromGrammarGemini(result.payload);
+      const parsedQuestions = questionsFromGrammarGemini(result.payload);
       const success: GrammarAnalyzeSuccess = {
         ok: true,
         source: "gemini",
-        message: parsed.questions.length
-          ? `Extracted ${parsed.questions.length} grammar question${parsed.questions.length === 1 ? "" : "s"}.`
-          : "The photo was read, but no grammar questions were found.",
-        questions: parsed.questions,
-        rawText: parsed.rawText || result.rawText,
+        message: parsedQuestions.questions.length
+          ? `Extracted ${parsedQuestions.questions.length} grammar question${parsedQuestions.questions.length === 1 ? "" : "s"}.`
+          : parsed.input.kind === "text"
+            ? "The text was read, but no grammar questions were found."
+            : "The photo was read, but no grammar questions were found.",
+        questions: parsedQuestions.questions,
+        rawText: parsedQuestions.rawText || result.rawText,
       };
       return json(success);
     }
@@ -214,7 +264,7 @@ export async function POST(request: Request) {
       error: networkish
         ? safeMessage(lastMessage)
         : shouldTryNextGrammarModel(lastMessage)
-          ? "Gemini is busy right now. Try the photo again in a moment."
+          ? "Gemini is busy right now. Try again in a moment."
           : `Gemini could not analyze the grammar page. ${safeMessage(lastMessage)}`,
     },
     503,

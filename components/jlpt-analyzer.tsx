@@ -1,17 +1,18 @@
 "use client";
 
-import { BookmarkPlus, Camera, ImagePlus, Library, Loader2, Sparkles, X } from "lucide-react";
+import { BookmarkPlus, Library, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
+import { AnalyzerInputPanel } from "@/components/analyzer-input-panel";
 import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { GoiDrawer } from "@/components/goi-drawer";
 import { JlptQuestionCard } from "@/components/jlpt-question-card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
 import { useDecks } from "@/hooks/use-decks";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
-import { requestJlptAnalyze } from "@/lib/client-jlpt";
+import { requestJlptAnalyze, requestJlptAnalyzeText } from "@/lib/client-jlpt";
 import { createDeck } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
 import { jlptQuestionsToVocabRows } from "@/lib/jlpt-to-goi";
@@ -21,26 +22,8 @@ import type { JlptQuestion } from "@/src/constants/jlptPrompt";
 type PreparedJlptImage = { base64: string; previewUrl: string };
 
 const PAGE_TITLE = "Japanese Vocabulary Analyzer";
+const MAX_TEXT_CHARS = 28_000;
 
-const surface =
-  "rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] backdrop-blur-sm dark:border-border/50 dark:ring-white/[0.03]";
-
-/** Primary CTA — Analyze */
-const btnAnalyze =
-  [
-    "inline-flex h-11 min-h-11 w-full items-center justify-center gap-2 rounded-xl px-5",
-    "border border-primary/30 bg-primary text-sm font-semibold tracking-tight text-primary-foreground",
-    "shadow-[0_1px_2px_color-mix(in_oklab,var(--foreground)_12%,transparent),0_6px_16px_-8px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
-    "transition-all duration-200",
-    "hover:bg-primary/92 hover:shadow-[0_2px_4px_color-mix(in_oklab,var(--foreground)_10%,transparent),0_10px_22px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)]",
-    "active:translate-y-px active:scale-[0.985] active:shadow-none",
-    "disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none",
-    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/45",
-    "sm:w-auto sm:min-w-[8.5rem]",
-    "[&_svg:not([class*='size-'])]:size-4",
-  ].join(" ");
-
-/** Icon-only save */
 const btnSaveIcon =
   [
     "inline-flex size-10 shrink-0 items-center justify-center rounded-xl",
@@ -53,7 +36,6 @@ const btnSaveIcon =
     "[&_svg:not([class*='size-'])]:size-4",
   ].join(" ");
 
-/** Compact “View Goi” next to save */
 const btnViewGoi =
   [
     "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3",
@@ -64,20 +46,16 @@ const btnViewGoi =
     "[&_svg:not([class*='size-'])]:size-3.5",
   ].join(" ");
 
-const btnGhost =
-  "h-9 gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground active:scale-[0.98] dark:hover:bg-white/[0.06] [&_svg:not([class*='size-'])]:size-3.5";
-
-const btnOutline =
-  "h-9 gap-1.5 rounded-lg border border-border/70 bg-background/50 px-3 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200 hover:border-border hover:bg-muted/50 hover:text-foreground active:scale-[0.98] dark:border-white/10 dark:hover:bg-white/[0.05] [&_svg:not([class*='size-'])]:size-3.5";
-
 export function JlptAnalyzer() {
   const { addDeck, decks, ready } = useDecks();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [inputMode, setInputMode] = useState<AnalyzerInputMode>("image");
   const [dragging, setDragging] = useState(false);
   const [prepared, setPrepared] = useState<PreparedJlptImage | null>(null);
+  const [textInput, setTextInput] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [goiOpen, setGoiOpen] = useState(false);
@@ -93,6 +71,8 @@ export function JlptAnalyzer() {
     if (!next) return;
     setError(null);
     setQuestions([]);
+    setTextInput("");
+    setInputMode("image");
     try {
       const nextPrepared = await fileToJpegBase64ForJlpt(next);
       setPrepared(nextPrepared);
@@ -102,9 +82,25 @@ export function JlptAnalyzer() {
     }
   }
 
+  function switchMode(next: AnalyzerInputMode) {
+    if (next === inputMode) return;
+    abortRef.current?.abort();
+    setAnalyzing(false);
+    setError(null);
+    setQuestions([]);
+    setDragging(false);
+    if (next === "image") {
+      setTextInput("");
+    } else {
+      setPrepared(null);
+    }
+    setInputMode(next);
+  }
+
   function clearSelection() {
     abortRef.current?.abort();
     setPrepared(null);
+    setTextInput("");
     setAnalyzing(false);
     setError(null);
     setQuestions([]);
@@ -112,7 +108,11 @@ export function JlptAnalyzer() {
   }
 
   async function analyze() {
-    if (!prepared || analyzing) return;
+    const trimmed = textInput.trim();
+    const usingText = inputMode === "text";
+    if (usingText ? !trimmed : !prepared) return;
+    if (analyzing) return;
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -120,7 +120,9 @@ export function JlptAnalyzer() {
     setQuestions([]);
     setAnalyzing(true);
     try {
-      const result = await requestJlptAnalyze(prepared.base64, "image/jpeg", controller.signal);
+      const result = usingText
+        ? await requestJlptAnalyzeText(trimmed, controller.signal)
+        : await requestJlptAnalyze(prepared!.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setQuestions(result.questions);
       if (result.source === "cache") toast.message("Loaded from cache");
@@ -157,6 +159,7 @@ export function JlptAnalyzer() {
   }
 
   const hasResults = questions.length > 0;
+  const canAnalyze = inputMode === "text" ? textInput.trim().length > 0 : Boolean(prepared);
 
   return (
     <div className="min-h-full">
@@ -179,99 +182,43 @@ export function JlptAnalyzer() {
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:space-y-5 sm:px-6 sm:pt-7">
         <GeminiKeyNotice />
 
-        <section
-          className={[
-            surface,
-            "overflow-hidden transition-all duration-200",
-            dragging ? "border-primary/40 bg-primary/[0.06] shadow-sm" : "",
-          ].join(" ")}
-        >
-          <div
-            className={[
-              "px-4 py-5 text-center transition-colors duration-200 sm:px-5 sm:py-5",
-              prepared ? "bg-muted/20" : "border-b border-dashed border-border/50",
-            ].join(" ")}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragging(false);
-              void takeFile(event.dataTransfer.files?.[0] ?? null);
-            }}
-          >
-            {prepared ? (
-              // Local preview of a compressed photo the user just chose.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={prepared.previewUrl}
-                alt="Selected exam page"
-                className="mx-auto max-h-44 w-full rounded-lg border border-border/50 object-contain sm:max-h-52"
-              />
-            ) : (
-              <div className="flex flex-col items-center py-1 sm:py-2">
-                <div className="grid size-11 place-items-center rounded-xl border border-border/60 bg-background text-primary transition-transform duration-200">
-                  <ImagePlus className="size-5" />
-                </div>
-                <p className="mt-3 text-sm font-medium tracking-tight text-foreground">
-                  Drop an image here
-                </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  PNG, JPG, or WebP · Mondai 1–6
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-border/50 px-3 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                className={btnOutline}
-                disabled={analyzing}
-                onClick={() => fileRef.current?.click()}
-              >
-                <ImagePlus />
-                Choose photo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={btnOutline}
-                disabled={analyzing}
-                onClick={() => cameraRef.current?.click()}
-              >
-                <Camera />
-                Camera
-              </Button>
-              {prepared ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={btnGhost}
-                  disabled={analyzing}
-                  onClick={clearSelection}
-                >
-                  <X />
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              className={btnAnalyze}
-              disabled={!prepared || analyzing || geminiReady !== true}
-              onClick={() => void analyze()}
-            >
-              {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
-              <span>{analyzing ? "Analyzing…" : "Analyze"}</span>
-            </button>
-          </div>
-        </section>
+        <AnalyzerInputPanel
+          mode={inputMode}
+          onModeChange={switchMode}
+          analyzing={analyzing}
+          canAnalyze={canAnalyze}
+          geminiReady={geminiReady === true}
+          dragging={dragging}
+          prepared={prepared}
+          textInput={textInput}
+          maxTextChars={MAX_TEXT_CHARS}
+          imageHint="PNG, JPG, or WebP · Mondai 1–6"
+          imageAlt="Selected exam page"
+          textTitle="Paste or type vocabulary text"
+          textHint=""
+          textPlaceholder={"問題4\n1 彼の話はあまりにも_____ので、誰も信じなかった。\n1 現実的　2 非現実的　3 積極的　4 消極的"}
+          textareaId="jlpt-text-input"
+          onTextChange={(value) => {
+            setTextInput(value);
+            setPrepared(null);
+            setError(null);
+            setQuestions([]);
+          }}
+          onPickFile={() => fileRef.current?.click()}
+          onPickCamera={() => cameraRef.current?.click()}
+          onClear={clearSelection}
+          onAnalyze={() => void analyze()}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            void takeFile(event.dataTransfer.files?.[0] ?? null);
+          }}
+        />
 
         {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 

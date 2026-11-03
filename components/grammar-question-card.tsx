@@ -180,7 +180,7 @@ function DistractorCard({
 }
 
 export function GrammarQuestionCard({ question }: { question: GrammarQuestion }) {
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const panelId = useId();
   const readings = useMemo(() => buildGrammarReadings(question), [question]);
   const parts = useMemo(

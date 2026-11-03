@@ -2,12 +2,21 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   GRAMMAR_DEFAULT_GEMINI_MODEL,
+  GRAMMAR_MAX_TEXT_CHARS,
   GRAMMAR_RESPONSE_SCHEMA,
   grammarGeminiModelChain,
   grammarGeminiModelName,
+  normalizeGrammarTextInput,
   questionsFromGrammarGemini,
 } from "./gemini-grammar";
 import { Type } from "@google/genai";
+
+describe("normalizeGrammarTextInput", () => {
+  it("trims, normalizes newlines, and caps length", () => {
+    assert.equal(normalizeGrammarTextInput("  a\r\nb\u0000  "), "a\nb");
+    assert.equal(normalizeGrammarTextInput("x".repeat(GRAMMAR_MAX_TEXT_CHARS + 10)).length, GRAMMAR_MAX_TEXT_CHARS);
+  });
+});
 
 describe("grammarGeminiModelName", () => {
   it("defaults to gemini-2.5-flash", () => {

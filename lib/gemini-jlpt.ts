@@ -22,7 +22,15 @@ export const JLPT_GEMINI_FALLBACK_MODELS = [
 /** Enough headroom for a full Mondai 1–6 page of short Burmese explanations. */
 export const JLPT_MAX_OUTPUT_TOKENS = 65_536;
 
+/** Cap for pasted Mondai text (characters). */
+export const JLPT_MAX_TEXT_CHARS = 28_000;
+
 const REQUEST_TIMEOUT_MS = 90_000;
+
+/** Normalize pasted vocabulary / Mondai text for analysis. */
+export function normalizeJlptTextInput(raw: string): string {
+  return raw.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim().slice(0, JLPT_MAX_TEXT_CHARS);
+}
 
 /** REST responseSchema for generateContent JSON mode. */
 const JLPT_RESPONSE_SCHEMA = {
@@ -159,16 +167,35 @@ export function buildGenerateContentUrl(model: string, apiKey: string): string {
   return `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 }
 
-/** REST body: prompt text + inline_data image (snake_case MIME fields). */
+type JlptContentPart =
+  | { text: string }
+  | { inline_data: { mime_type: string; data: string } };
+
+/** REST body: system prompt + image and/or pasted text (snake_case MIME fields). */
 export function buildJlptGenerateContentBody(
   imageBase64: string,
   mimeType: string,
-  options?: { structured?: boolean; mondaiTypes?: readonly JlptMondaiType[] },
+  options?: { structured?: boolean; mondaiTypes?: readonly JlptMondaiType[]; textInput?: string },
 ) {
   const structured = options?.structured !== false;
-  const data = cleanImageBase64(imageBase64);
-  const normalizedMime = normalizeImageMimeType(mimeType);
   const prompt = jlptSystemPrompt(options?.mondaiTypes);
+  const textInput = options?.textInput ? normalizeJlptTextInput(options.textInput) : "";
+  const parts: JlptContentPart[] = [{ text: prompt }];
+
+  if (textInput) {
+    parts.push({
+      text: `次のテキストはJLPT語彙問題（問題1〜問題6）です。画像ではなくテキストとして読み取り、指定のJSONに構造化してください。\n\n---\n${textInput}\n---`,
+    });
+  } else {
+    const data = cleanImageBase64(imageBase64);
+    const normalizedMime = normalizeImageMimeType(mimeType);
+    parts.push({
+      inline_data: {
+        mime_type: normalizedMime,
+        data,
+      },
+    });
+  }
 
   // Only send fields supported by generateContent for Flash models.
   // Do not include thinking / thinkingConfig — it 400s on flash-lite / 3.8-flash.
@@ -176,15 +203,7 @@ export function buildJlptGenerateContentBody(
     contents: [
       {
         role: "user",
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: normalizedMime,
-              data,
-            },
-          },
-        ],
+        parts,
       },
     ],
     generationConfig: {
@@ -214,17 +233,20 @@ export function buildJlptImageParts(imageBase64: string, mimeType: string) {
 export async function callJlptGenerateContent(options: {
   apiKey: string;
   model: string;
-  imageBase64: string;
-  mimeType: string;
+  imageBase64?: string;
+  mimeType?: string;
+  textInput?: string;
   structured?: boolean;
   mondaiTypes?: readonly JlptMondaiType[];
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, structured = true, mondaiTypes } = options;
+  const { apiKey, model, imageBase64 = "", mimeType = "image/jpeg", textInput, structured = true, mondaiTypes } =
+    options;
   return postJlptGenerateContent({
     apiKey,
     model,
     imageBase64,
     mimeType,
+    textInput,
     structured,
     mondaiTypes,
   });
@@ -237,16 +259,18 @@ export async function callJlptGenerateContent(options: {
 export async function analyzeJlptExamPaper(options: {
   apiKey: string;
   model: string;
-  imageBase64: string;
-  mimeType: string;
+  imageBase64?: string;
+  mimeType?: string;
+  textInput?: string;
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType } = options;
+  const { apiKey, model, imageBase64 = "", mimeType = "image/jpeg", textInput } = options;
 
   const first = await callJlptGenerateContent({
     apiKey,
     model,
     imageBase64,
     mimeType,
+    textInput,
     structured: true,
   });
 
@@ -257,15 +281,16 @@ export async function analyzeJlptExamPaper(options: {
         model,
         imageBase64,
         mimeType,
+        textInput,
         structured: false,
       });
       if (!loose.ok) return first;
-      return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, seed: loose });
+      return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, textInput, seed: loose });
     }
     return first;
   }
 
-  return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, seed: first });
+  return completeJlptIfNeeded({ apiKey, model, imageBase64, mimeType, textInput, seed: first });
 }
 
 async function completeJlptIfNeeded(options: {
@@ -273,9 +298,10 @@ async function completeJlptIfNeeded(options: {
   model: string;
   imageBase64: string;
   mimeType: string;
+  textInput?: string;
   seed: Extract<JlptGeminiCallResult, { ok: true }>;
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, seed } = options;
+  const { apiKey, model, imageBase64, mimeType, textInput, seed } = options;
 
   if (!seed.truncated && seed.questions.length > 0) {
     return seed;
@@ -286,6 +312,7 @@ async function completeJlptIfNeeded(options: {
     seedCount: seed.questions.length,
     truncated: seed.truncated,
     finishReason: seed.finishReason,
+    viaText: Boolean(textInput?.trim()),
   });
 
   let merged = seed.questions;
@@ -299,6 +326,7 @@ async function completeJlptIfNeeded(options: {
       model,
       imageBase64,
       mimeType,
+      textInput,
       structured: true,
       mondaiTypes: batch,
     });
@@ -309,6 +337,7 @@ async function completeJlptIfNeeded(options: {
         model,
         imageBase64,
         mimeType,
+        textInput,
         structured: false,
         mondaiTypes: batch,
       });
@@ -350,14 +379,19 @@ async function postJlptGenerateContent(options: {
   model: string;
   imageBase64: string;
   mimeType: string;
+  textInput?: string;
   structured: boolean;
   mondaiTypes?: readonly JlptMondaiType[];
 }): Promise<JlptGeminiCallResult> {
-  const { apiKey, model, imageBase64, mimeType, structured, mondaiTypes } = options;
+  const { apiKey, model, imageBase64, mimeType, textInput, structured, mondaiTypes } = options;
   const url = buildGenerateContentUrl(model, apiKey);
-  const body = buildJlptGenerateContentBody(imageBase64, mimeType, { structured, mondaiTypes });
-  const mime = body.contents[0]?.parts[1]?.inline_data?.mime_type ?? mimeType;
-  const base64Chars = body.contents[0]?.parts[1]?.inline_data?.data.length ?? 0;
+  const body = buildJlptGenerateContentBody(imageBase64, mimeType, { structured, mondaiTypes, textInput });
+  const secondPart = body.contents[0]?.parts[1];
+  const mime =
+    secondPart && "inline_data" in secondPart ? secondPart.inline_data.mime_type : undefined;
+  const base64Chars =
+    secondPart && "inline_data" in secondPart ? secondPart.inline_data.data.length : 0;
+  const textChars = textInput ? normalizeJlptTextInput(textInput).length : 0;
 
   console.info(
     "[Gemini JLPT] request",
@@ -366,7 +400,8 @@ async function postJlptGenerateContent(options: {
       structured,
       mondaiTypes: mondaiTypes ?? "all",
       mimeType: mime,
-      base64Chars,
+      base64Chars: base64Chars || undefined,
+      textChars: textChars || undefined,
       maxOutputTokens: JLPT_MAX_OUTPUT_TOKENS,
       endpoint: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       generationConfigKeys: Object.keys(body.generationConfig),
