@@ -29,6 +29,7 @@ const SAMPLE = {
       ],
       target_word: "失敗",
       reading: "しっぱい",
+      meaning_burmese: "မအောင်မြင်ခြင်း",
       correct_option: "3",
       options_table: [
         {
@@ -187,6 +188,109 @@ test("backfills option reading from question reading for the correct choice", ()
     }),
   );
   assert.equal(result.questions[0]?.options_table[2]?.reading, "しっぱい");
+});
+
+test("Mondai 6 collapses dumped usage sentences to the headword and keeps short meaning", () => {
+  const result = questionsFromGemini(
+    JSON.stringify({
+      questions: [
+        {
+          mondai_type: 6,
+          question_number: 28,
+          japanese_sentence:
+            "掲示1 山田氏は有名な科学者で、いくつもの本に研究論文を掲示している。2 テレビでよく掲示されている洗剤が安くなっていたので、試しに買ってみた。3最近は名刺に自分の写真を掲示しているビジネスマンも多い。4 マンションの入り口に、水道工事の知らせが掲示されていた。",
+          furigana_tokens: [{ surface: "掲示", reading: "けいじ" }],
+          target_word: "掲示",
+          reading: "けいじ",
+          meaning_burmese: "ကြေညာစာကပ်ခြင်း",
+          correct_option: "4",
+          options_table: [
+            {
+              option: "1",
+              japanese: "山田氏は有名な科学者で、いくつもの本に研究論文を掲示している。",
+              reading: "",
+              meaning_burmese: "ကြေညာစာကပ်ခြင်း",
+              usage_burmese: "",
+              why_wrong_burmese: "စာတမ်းကို တင်သည်ဟု မသုံး",
+            },
+            {
+              option: "2",
+              japanese: "テレビでよく掲示されている洗剤が安くなっていたので、試しに買ってみた。",
+              reading: "",
+              meaning_burmese: "ကြေညာစာကပ်ခြင်း",
+              usage_burmese: "",
+              why_wrong_burmese: "ကြော်ငြာကို ပြသည်ဟု မသုံး",
+            },
+            {
+              option: "3",
+              japanese: "最近は名刺に自分の写真を掲示しているビジネスマンも多い。",
+              reading: "",
+              meaning_burmese: "ကြေညာစာကပ်ခြင်း",
+              usage_burmese: "",
+              why_wrong_burmese: "ဓာတ်ပုံကို ကတ်ပေါ် တင်သည်ဟု မသုံး",
+            },
+            {
+              option: "4",
+              japanese: "マンションの入り口に、水道工事の知らせが掲示されていた。",
+              reading: "",
+              meaning_burmese: "ကြေညာစာကပ်ခြင်း",
+              usage_burmese: "အကြောင်းကြားစာ ကပ်ထားသည်",
+              why_wrong_burmese: "",
+            },
+          ],
+          explanation_burmese: "အကြောင်းကြားစာကို နံရံတွင် ကပ်သည်ဟု ဆိုလိုသည်။",
+          nuance_note: "",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.questions[0]?.japanese_sentence, "掲示");
+  assert.equal(result.questions[0]?.meaning_burmese, "ကြေညာစာကပ်ခြင်း");
+  assert.equal(result.questions[0]?.target_word, "掲示");
+});
+
+test("parser guard shortens question meaning_burmese only; 意味 table options stay intact", () => {
+  const result = questionsFromGemini(
+    JSON.stringify({
+      questions: [
+        {
+          ...SAMPLE.questions[0],
+          meaning_burmese: "မအောင်မြင်ခြင်းသည်။",
+          options_table: [
+            {
+              option: "1",
+              japanese: "成功",
+              reading: "せいこう",
+              meaning_burmese: "အောင်မြင်ခြင်း၊ အောင်မြင်မှု။",
+              usage_burmese: "အောင်မြင်သည်ဟု သုံး",
+              why_wrong_burmese: "ဆန့်ကျင်ဘက်",
+            },
+            {
+              option: "2",
+              japanese: "完成",
+              reading: "かんせい",
+              meaning_burmese: "ပြီးဆုံးခြင်း၊ ပြီးမြောက်ခြင်း။",
+              usage_burmese: "ပြီးသည်ဟု သုံး",
+              why_wrong_burmese: "မကိုက်ညီ",
+            },
+            {
+              option: "3",
+              japanese: "失敗",
+              reading: "しっぱい",
+              meaning_burmese: "မအောင်မြင်ခြင်း၊ ရှုံးနိမ့်ခြင်း။",
+              usage_burmese: "မအောင်မြင်ဟု သုံး",
+              why_wrong_burmese: "",
+            },
+            SAMPLE.questions[0].options_table[3],
+          ],
+        },
+      ],
+    }),
+  );
+  assert.equal(result.questions[0]?.meaning_burmese, "မအောင်မြင်ခြင်း");
+  assert.equal(result.questions[0]?.options_table[0]?.meaning_burmese, "အောင်မြင်ခြင်း၊ အောင်မြင်မှု။");
+  assert.equal(result.questions[0]?.options_table[1]?.meaning_burmese, "ပြီးဆုံးခြင်း၊ ပြီးမြောက်ခြင်း။");
+  assert.equal(result.questions[0]?.options_table[2]?.meaning_burmese, "မအောင်မြင်ခြင်း၊ ရှုံးနိမ့်ခြင်း။");
 });
 
 test("extracts exact Gemini API error messages", () => {

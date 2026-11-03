@@ -37,6 +37,11 @@ export type JlptQuestion = {
   furigana_tokens: JlptFuriganaToken[];
   target_word: string;
   reading: string;
+  /**
+   * Short dictionary gloss of `target_word` only (Burmese).
+   * UI Line 2 under the headword — never a stem translation, never the kanji again.
+   */
+  meaning_burmese: string;
   correct_option: string;
   options_table: JlptOptionRow[];
   explanation_burmese: string;
@@ -75,6 +80,7 @@ const JLPT_OUTPUT_EXAMPLE = `
       ],
       "target_word": "非現実的",
       "reading": "ひげんじつてき",
+      "meaning_burmese": "လက်တွေ့မကျသော",
       "correct_option": "2",
       "options_table": [
         {
@@ -136,14 +142,28 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
 4. furigana_tokens: { surface, reading }[]。連結で japanese_sentence に一致。漢字を含む語は reading（ひらがな）、かな・記号・空欄は ""
 5. target_word: 問われている語・表現（なければ ""）
 6. reading: target_word の読み（ひらがな）。不要なら ""
-7. correct_option: "1"|"2"|"3"|"4" または ""
-8. options_table: 各選択肢
+7. meaning_burmese: target_word の短い辞書的語義のみ（自然なビルマ語の単語・短い句）。設問文の全文翻訳・漢字の再掲・長い説明は禁止
+8. correct_option: "1"|"2"|"3"|"4" または ""
+9. options_table: 各選択肢
    - option / japanese / reading
-   - meaning_burmese: 実際の意味（自然なビルマ語）
+   - meaning_burmese: その選択肢の実際の意味（自然なビルマ語）。意味テーブル用。設問ヘッダー用の短語ルールは適用しない
    - usage_burmese: 典型的な使い方・場面・よく来る結びつき（自然なビルマ語）。短い日本語例があれば漢字に《読み》を付ける
    - why_wrong_burmese: 誤答のみ、この設問の文脈で不適切な理由（自然なビルマ語）。正解は ""
-9. explanation_burmese: 設問文の意味を踏まえ、なぜ正解かを簡潔でわかりやすい自然なビルマ語で説明
-10. nuance_note: 類義語の違いや注意点を、短く自然なビルマ語で補足
+10. explanation_burmese: 設問文の意味を踏まえ、なぜ正解かを簡潔でわかりやすい自然なビルマ語で説明
+11. nuance_note: 類義語の違いや注意点を、短く自然なビルマ語で補足
+
+# 問題6（用法）の特別ルール
+- japanese_sentence と target_word は見出し語のみ（例: 「掲示」）。4つの用例文を連結して入れない
+- 用例文は必ず options_table[].japanese に1文ずつ入れる
+- 設問レベルの meaning_burmese は見出し語の短いビルマ語語義（例: 掲示 → 「ကြေညာစာကပ်ခြင်း」）。「掲示」の再掲や用例文の翻訳は禁止
+- UI ヘッダー Line 1 = target_word、Line 2 = 設問レベルの meaning_burmese（短いビルマ語）
+- options_table[].meaning_burmese（意味テーブル）はそのまま詳しく書いてよい。ヘッダー短縮ルールの対象外
+
+# 設問レベルの meaning_burmese（ヘッダー Line 2・厳守）
+- 対象は target_word のみ。options_table の意味欄とは別
+- 辞書の見出し語のような短いビルマ語のみ（目安: 1〜3語、約25文字以内）
+- 良い例: 掲示 → 「ကြေညာစာကပ်ခြင်း」、補足 → 「ဖြည့်စွက်ခြင်း」、失敗 → 「မအောင်မြင်ခြင်း」
+- 禁止: 漢字の繰り返し（掲示→掲示）、設問文／用例の全文翻訳、〜သည်။ / 〜ပါသည်။ で終わる長文
 
 # 解説の書き方（元のわかりやすい口調）
 - 設問文（japanese_sentence）の文脈をよく読んでから書く。一般論だけの説明は禁止
@@ -156,11 +176,12 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
 - ビルマ語のみで書く（英語・中国語・ローマ字解説禁止）
 - 機械翻訳調・ぎこちない直訳を避ける
 - 日本語キーワードを残すときは必ず漢字と読みをペアで書く: 漢字《ひらがな》（例: 安心《あんしん》、非現実的《ひげんじつてき》）。読みなしの裸の漢字だけは禁止
+- 設問レベルの meaning_burmese（ヘッダー用）には日本語・《読み》・句点「။」付きの長文を入れない。options_table の意味欄はこの制限の対象外
 
 # 出力形式（厳守）
 - 有効なJSONのみ。Markdown・コードフェンス・前後の説明文禁止
 - ルート: { "questions": [ ... ] }
-- 設問キーのみ: mondai_type, question_number, japanese_sentence, furigana_tokens, target_word, reading, correct_option, options_table, explanation_burmese, nuance_note
+- 設問キーのみ: mondai_type, question_number, japanese_sentence, furigana_tokens, target_word, reading, meaning_burmese, correct_option, options_table, explanation_burmese, nuance_note
 - options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, why_wrong_burmese
 - furigana_tokens キーのみ: surface, reading
 - 並び: mondai_type → question_number 昇順`;

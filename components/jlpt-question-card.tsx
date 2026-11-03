@@ -5,10 +5,41 @@ import { useId, useMemo, useState, type ReactNode } from "react";
 import { FuriganaHover } from "@/components/furigana-hover";
 import { Badge } from "@/components/ui/badge";
 import { harvestMarkupReadings } from "@/lib/furigana";
+import { primaryMeaning } from "@/lib/jlpt-to-goi";
 import type { JlptOptionRow, JlptQuestion } from "@/src/constants/jlptPrompt";
 
 function isCorrectOption(option: string, correct: string): boolean {
   return option.trim() !== "" && option.trim() === correct.trim();
+}
+
+/**
+ * Line 2 under the headword: short Burmese dictionary gloss —
+ * never a stem-sentence translation, never the Kanji again.
+ */
+export function resolveTargetMeaningLine(question: JlptQuestion): string {
+  const headword = question.target_word.trim();
+  const fromQuestion = primaryMeaning(question.meaning_burmese);
+  if (fromQuestion && fromQuestion !== headword) return fromQuestion;
+
+  const correct = question.options_table.find((row) =>
+    isCorrectOption(row.option, question.correct_option),
+  );
+  const fromOption = primaryMeaning(correct?.meaning_burmese);
+  if (fromOption && fromOption !== headword) return fromOption;
+
+  return "";
+}
+
+/** True when the stem is only the headword (or a Mondai 6 用法 dump we should hide). */
+function shouldHideStem(question: JlptQuestion): boolean {
+  const stem = question.japanese_sentence.trim();
+  const target = question.target_word.trim();
+  if (!stem) return true;
+  if (target && stem === target) return true;
+  // Numbered multi-sentence dump already collapsed by parser, but hide leftovers.
+  if ((stem.match(/[。．]/g) ?? []).length >= 2) return true;
+  if (/\d\s*[.．]/.test(stem) && stem.length > 40) return true;
+  return false;
 }
 
 /** Collect every known headword → reading from the analyzed question + prose markup. */
@@ -228,6 +259,9 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const panelId = useId();
   const readings = useMemo(() => buildQuestionReadings(question), [question]);
+  const targetMeaningLine = useMemo(() => resolveTargetMeaningLine(question), [question]);
+  const hideStem = shouldHideStem(question);
+  const headword = question.target_word.trim();
   const distractors = question.options_table.filter(
     (row) => !isCorrectOption(row.option, question.correct_option),
   );
@@ -259,29 +293,45 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
           ) : null}
         </div>
 
-        <FuriganaHover
-          text={question.japanese_sentence || "—"}
-          tokens={question.furigana_tokens}
-          readings={readings}
-          className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words text-foreground sm:text-lg sm:leading-[1.6]"
-        />
-
-        {(question.target_word || question.reading) && (
-          <p className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-muted-foreground">
-            {question.target_word ? (
-              <span className="font-medium break-words text-foreground/85">
-                <FuriganaHover
-                  text={question.target_word}
-                  reading={question.reading}
-                  readings={readings}
-                />
-              </span>
-            ) : null}
-            {question.reading && !question.target_word ? (
-              <span className="tracking-[0.06em] break-words">{question.reading}</span>
-            ) : null}
-          </p>
+        {/* Line 1: headword (or unique stem when it differs) */}
+        {hideStem && headword ? (
+          <FuriganaHover
+            text={headword}
+            reading={question.reading}
+            readings={readings}
+            className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words text-foreground sm:text-lg sm:leading-[1.6]"
+          />
+        ) : (
+          <FuriganaHover
+            text={question.japanese_sentence || headword || "—"}
+            tokens={hideStem ? undefined : question.furigana_tokens}
+            reading={hideStem ? question.reading : undefined}
+            readings={readings}
+            className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words text-foreground sm:text-lg sm:leading-[1.6]"
+          />
         )}
+
+        {/* Line 2: short Myanmar meaning — never repeat the kanji */}
+        {targetMeaningLine ? (
+          <p
+            lang="my"
+            className="mt-1.5 font-myanmar text-[13px] leading-6 break-words text-foreground/80"
+          >
+            {targetMeaningLine}
+          </p>
+        ) : question.reading && hideStem ? (
+          <p className="mt-1.5 text-sm tracking-[0.06em] break-words text-muted-foreground">
+            {question.reading}
+          </p>
+        ) : !hideStem && headword && headword !== question.japanese_sentence.trim() ? (
+          <p className="mt-2 text-sm font-medium break-words text-foreground/85">
+            <FuriganaHover
+              text={headword}
+              reading={question.reading}
+              readings={readings}
+            />
+          </p>
+        ) : null}
       </div>
 
       <div className="p-3.5 sm:p-4">

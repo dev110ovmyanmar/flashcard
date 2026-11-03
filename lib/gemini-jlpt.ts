@@ -7,6 +7,7 @@ import {
   type JlptOptionRow,
   type JlptQuestion,
 } from "@/src/constants/jlptPrompt";
+import { primaryMeaning } from "@/lib/jlpt-to-goi";
 
 /** Primary model for JLPT vision analysis — Flash-Lite for lowest latency. */
 export const JLPT_DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
@@ -48,6 +49,11 @@ const JLPT_RESPONSE_SCHEMA = {
           },
           target_word: { type: "STRING" },
           reading: { type: "STRING" },
+          meaning_burmese: {
+            type: "STRING",
+            description:
+              "Short dictionary gloss of target_word only (1–3 Burmese words, ≤25 chars). Never repeat the Japanese headword. Never a full sentence translation.",
+          },
           correct_option: { type: "STRING" },
           options_table: {
             type: "ARRAY",
@@ -57,7 +63,11 @@ const JLPT_RESPONSE_SCHEMA = {
                 option: { type: "STRING" },
                 japanese: { type: "STRING" },
                 reading: { type: "STRING" },
-                meaning_burmese: { type: "STRING" },
+                meaning_burmese: {
+                  type: "STRING",
+                  description:
+                    "Natural Burmese meaning of this option for the 意味 table. May include multiple senses. Not the short header gloss.",
+                },
                 usage_burmese: { type: "STRING" },
                 why_wrong_burmese: { type: "STRING" },
               },
@@ -81,6 +91,7 @@ const JLPT_RESPONSE_SCHEMA = {
           "furigana_tokens",
           "target_word",
           "reading",
+          "meaning_burmese",
           "correct_option",
           "options_table",
           "explanation_burmese",
@@ -743,6 +754,7 @@ function questionCompleteness(question: JlptQuestion): number {
   return (
     (question.japanese_sentence ? 3 : 0) +
     (question.target_word ? 1 : 0) +
+    (question.meaning_burmese ? 1 : 0) +
     (question.correct_option ? 1 : 0) +
     (question.explanation_burmese ? 1 : 0) +
     question.options_table.length * 2 +
@@ -800,7 +812,7 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
   if (question_number === null) return null;
 
   const options_table = tidyOptions(value.options_table ?? value.optionsTable ?? value.options);
-  const japanese_sentence = asString(value.japanese_sentence ?? value.japaneseSentence ?? value.sentence);
+  let japanese_sentence = asString(value.japanese_sentence ?? value.japaneseSentence ?? value.sentence);
   const furigana_tokens = tidyFuriganaTokens(
     value.furigana_tokens ?? value.furiganaTokens ?? value.tokens,
   );
@@ -814,6 +826,11 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
 
   if (!japanese_sentence && !target_word && options_table.length === 0) return null;
 
+  // Mondai 6: stem should be the headword only — never a dump of all 4 usage sentences.
+  if (mondai_type === 6) {
+    japanese_sentence = tidyMondai6Stem(japanese_sentence, target_word);
+  }
+
   const normalizedOptions = options_table.map((row) => {
     const isCorrect = row.option.trim() !== "" && row.option.trim() === correct_option.trim();
     return {
@@ -824,6 +841,19 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
     };
   });
 
+  const correctRow = normalizedOptions.find(
+    (row) => row.option.trim() !== "" && row.option.trim() === correct_option.trim(),
+  );
+  const meaning_burmese =
+    primaryMeaning(
+      asString(
+        value.meaning_burmese ??
+          value.meaningBurmese ??
+          value.target_word_meaning ??
+          value.targetWordMeaning,
+      ),
+    ) || primaryMeaning(correctRow?.meaning_burmese);
+
   return {
     mondai_type,
     question_number,
@@ -831,11 +861,33 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
     furigana_tokens,
     target_word,
     reading,
+    meaning_burmese,
     correct_option,
     options_table: normalizedOptions,
     explanation_burmese,
     nuance_note,
   };
+}
+
+/** Drop concatenated 用法用例 blobs; keep a short headword stem for Mondai 6. */
+function tidyMondai6Stem(stem: string, targetWord: string): string {
+  const trimmed = stem.trim();
+  const target = targetWord.trim();
+  if (!trimmed) return target;
+  // Numbered multi-option dump: "掲示1 …。2 …。3 …。4 …。"
+  if (/\d\s*[.．、]?\s*.{8,}[\d]/.test(trimmed) || (trimmed.match(/[。．]/g) ?? []).length >= 2) {
+    return target || trimmed.slice(0, 40);
+  }
+  if (target && trimmed === target) return target;
+  // Prefer the headword when the stem is just that word (possibly with fluff).
+  if (target && (trimmed === target || trimmed.startsWith(target) && trimmed.length <= target.length + 4)) {
+    return target;
+  }
+  // Long stem that already embeds the headword → collapse to headword for the header.
+  if (target && trimmed.includes(target) && Array.from(trimmed).length > 40) {
+    return target;
+  }
+  return trimmed;
 }
 
 function tidyFuriganaTokens(value: unknown): JlptFuriganaToken[] {
@@ -859,6 +911,7 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
     const option = asString(item.option ?? item.number ?? item.label ?? item.id);
     const japanese = asString(item.japanese ?? item.text ?? item.word ?? item.kanji);
     const reading = asString(item.reading ?? item.furigana ?? item.yomi);
+    // Keep option meanings intact for the 意味 table — do not shorten here.
     const meaning_burmese = asString(
       item.meaning_burmese ?? item.meaningBurmese ?? item.burmese ?? item.meaning ?? item.myanmar,
     );

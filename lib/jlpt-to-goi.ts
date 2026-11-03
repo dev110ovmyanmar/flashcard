@@ -11,7 +11,14 @@ const KANA_READING_RE = /^[\u3040-\u309f\u30a0-\u30ffー゛゜・\s]+$/;
 const MYANMAR_RE = /[\u1000-\u109f\ua9e0-\ua9ff\uaa60-\uaa7f]/;
 /** Blank / placeholder surfaces that are not real vocabulary. */
 const PLACEHOLDER_RE = /_{2,}|\uFF3F+|_____|…{2,}|\.{3,}/;
-const MEANING_MAX = 48;
+/** Hard cap for Line-2 / flashcard dictionary gloss (code points). */
+const MEANING_MAX = 25;
+/**
+ * Burmese sentence endings that signal a full stem translation
+ * rather than a short headword gloss (e.g. "…သည်။").
+ */
+const SENTENCE_GLOSS_RE =
+  /သည်။|ပါသည်။|၏။|ပါ။|မည်။|ခဲ့သည်|နေသည်|ဖြစ်သည်|သောကြောင့်|သဖြင့်/;
 
 /**
  * Turn analyzed JLPT questions into Goi flashcard rows.
@@ -103,9 +110,14 @@ export function cleanReading(raw: string | null | undefined, headword: string): 
   return Array.from(text).slice(0, 60).join("");
 }
 
+function looksLikeSentenceGloss(text: string): boolean {
+  return SENTENCE_GLOSS_RE.test(text) || Array.from(text).length > MEANING_MAX;
+}
+
 /**
- * Pick a single practical Burmese gloss:
- * first sense when several are listed (၊ / ; / · / etc.), clipped short.
+ * Pick a single practical Burmese dictionary gloss for Line 2 / flashcards:
+ * first sense when several are listed (၊ / ; / · / etc.), never a full sentence.
+ * Guards against Gemini dumping the stem translation into meaning_burmese.
  */
 export function primaryMeaning(raw: string | null | undefined): string {
   let text = (raw ?? "").trim();
@@ -117,21 +129,48 @@ export function primaryMeaning(raw: string | null | undefined): string {
   text = text.replace(/\s+/g, " ").trim();
   if (!text) return "";
 
+  // Reject bare Japanese headword repeats (e.g. meaning = "掲示").
+  if (!MYANMAR_RE.test(text) && JP_CHAR_RE.test(text)) return "";
+
+  const hadSentencePunct = SENTENCE_GLOSS_RE.test(text);
+
   // Split multi-sense glosses; keep the first usable Burmese sense.
   const parts = text
     .split(/(?:၊|。|．|;|；|\/|／|\||·|•|\n)+/)
     .map((part) => part.replace(/^[၊。．\s]+|[။။.\s]+$/g, "").trim())
     .filter(Boolean);
 
-  const first = parts[0] ?? "";
+  let first = parts[0] ?? "";
   if (!first || !MYANMAR_RE.test(first)) return "";
+
+  // "glossသည်။" → strip the sentence-final copula (keep bare "ဝယ်သည်" intact).
+  if (hadSentencePunct) {
+    first = first.replace(/သည်$/u, "").trim();
+  }
+  if (!first) return "";
+
+  // Sentence-shaped dumps → peel before clause markers, else drop.
+  if (looksLikeSentenceGloss(first)) {
+    const peeled =
+      first
+        .split(/(?:သောကြောင့်|သဖြင့်|သည်။|ပါသည်။|၏။|ဖြစ်သည်|ခဲ့သည်|နေသည်)/)[0]
+        ?.replace(/[။။.\s]+$/g, "")
+        .replace(/သည်$/u, "")
+        .trim() ?? "";
+    if (peeled && !looksLikeSentenceGloss(peeled) && !/\s/.test(peeled)) {
+      first = peeled;
+    } else {
+      return "";
+    }
+  }
 
   // Reject mostly-Latin / mostly-JP "meanings".
   const myanmarChars = Array.from(first).filter((ch) => MYANMAR_RE.test(ch)).length;
   if (myanmarChars < 2) return "";
   if (myanmarChars / Array.from(first).length < 0.45) return "";
 
-  return Array.from(first).slice(0, MEANING_MAX).join("").trim();
+  first = Array.from(first).slice(0, MEANING_MAX).join("").trim();
+  return first.replace(/[။။.]+$/g, "").trim();
 }
 
 export function isValidVocabEntry(kanji: string, reading: string, meaning: string): boolean {

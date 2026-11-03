@@ -22,6 +22,7 @@ const SAMPLE: JlptQuestion = {
   ],
   target_word: "失敗",
   reading: "しっぱい",
+  meaning_burmese: "မအောင်မြင်ခြင်း",
   correct_option: "3",
   options_table: [
     {
@@ -98,6 +99,17 @@ test("keeps only the first / most practical Burmese sense", () => {
   assert.equal(primaryMeaning("ဝယ်သည်"), "ဝယ်သည်");
   assert.equal(primaryMeaning("buy / purchase"), "");
   assert.equal(primaryMeaning("現実的《げんじつてき》 လက်တွေ့ကျသော"), "လက်တွေ့ကျသော");
+  assert.equal(primaryMeaning("ကြေညာစာကပ်ခြင်း"), "ကြေညာစာကပ်ခြင်း");
+  assert.equal(primaryMeaning("掲示"), "");
+});
+
+test("rejects or peels full-sentence stem translations from meaning_burmese", () => {
+  assert.equal(
+    primaryMeaning("သူ၏စကားသည် အလွန်လက်တွေ့မကျသောကြောင့် မည်သူမျှမယုံခဲ့ပါ။"),
+    "",
+  );
+  assert.equal(primaryMeaning("ဖြည့်စွက်ခြင်းသည်။"), "ဖြည့်စွက်ခြင်း");
+  assert.equal(primaryMeaning("မအောင်မြင်ခြင်း"), "မအောင်မြင်ခြင်း");
 });
 
 test("rejects invalid headwords, readings, and empty glosses", () => {
