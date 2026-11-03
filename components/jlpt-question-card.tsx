@@ -61,13 +61,21 @@ function CorrectBadge() {
   );
 }
 
-function SectionLabel({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "sky" | "rose" }) {
+function SectionLabel({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "sky" | "rose" | "amber";
+}) {
   const toneClass =
     tone === "sky"
       ? "text-sky-700 dark:text-sky-300"
       : tone === "rose"
         ? "text-rose-700 dark:text-rose-300"
-        : "text-muted-foreground";
+        : tone === "amber"
+          ? "text-amber-800 dark:text-amber-300"
+          : "text-muted-foreground";
   return (
     <h3 className={`text-[10px] font-semibold tracking-[0.14em] uppercase ${toneClass}`}>{children}</h3>
   );
@@ -438,12 +446,12 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                     </section>
                   ) : null}
                   {question.nuance_note ? (
-                    <section className="rounded-lg border border-border/40 bg-muted/30 px-3.5 py-3 dark:border-white/6 dark:bg-white/[0.03]">
-                      <SectionLabel>Nuance & Context</SectionLabel>
+                    <section className="rounded-lg border border-amber-500/35 bg-amber-50/80 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-950/20">
+                      <SectionLabel tone="amber">Nuance & Context</SectionLabel>
                       <ProseWithFurigana
                         text={question.nuance_note}
                         readings={readings}
-                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words text-muted-foreground"
+                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words text-amber-950/85 dark:text-amber-50/90"
                       />
                     </section>
                   ) : null}
