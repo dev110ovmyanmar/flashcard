@@ -50,14 +50,16 @@ function SectionLabel({
   tone = "default",
 }: {
   children: ReactNode;
-  tone?: "default" | "sky" | "rose";
+  tone?: "default" | "sky" | "rose" | "amber";
 }) {
   const toneClass =
     tone === "sky"
       ? "text-sky-700 dark:text-sky-300"
       : tone === "rose"
         ? "text-rose-700 dark:text-rose-300"
-        : "text-muted-foreground";
+        : tone === "amber"
+          ? "text-amber-800 dark:text-amber-300"
+          : "text-muted-foreground";
   return (
     <h3 className={`text-[10px] font-semibold tracking-[0.14em] uppercase ${toneClass}`}>{children}</h3>
   );
@@ -355,12 +357,12 @@ export function GrammarQuestionCard({ question }: { question: GrammarQuestion })
               <div className="overflow-hidden">
                 <div className="space-y-2.5 border-t border-border/40 px-3.5 pt-3 pb-3.5 dark:border-white/8">
                   {question.correctReasonBurmese ? (
-                    <section className="rounded-lg border border-border/50 bg-background/70 px-3.5 py-3 dark:border-white/8 dark:bg-black/15">
-                      <SectionLabel tone="sky">Explanation</SectionLabel>
+                    <section className="rounded-lg border border-amber-500/35 bg-amber-50/80 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-950/20">
+                      <SectionLabel tone="amber">Explanation</SectionLabel>
                       <ProseWithFurigana
                         text={question.correctReasonBurmese}
                         readings={readings}
-                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words text-muted-foreground"
+                        className="mt-2 block font-myanmar text-[14px] leading-7 break-words text-amber-950/85 dark:text-amber-50/90"
                       />
                     </section>
                   ) : null}
