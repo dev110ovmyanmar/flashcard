@@ -27,7 +27,7 @@ const SAMPLE = {
       usage_burmese: "မေ့သွားသည်ဟု ပြောသည်။",
       nuance_burmese: "နောင်တ ခံစားချက် ပါသည်။",
       context_example: "電車《でんしゃ》に傘《かさ》を忘《わす》れてしまった。",
-      jlpt_level: "N4",
+      jlpt_level: "N3",
     },
   ],
 };
@@ -53,24 +53,25 @@ test("parses structured script JSON", () => {
 
 test("accepts alternate vocabulary / grammar keys", () => {
   const parsed = payloadFromScriptGemini({
-    goi: [{ word: "駅", reading: "えき", meaning_burmese: "ဘူတာ" }],
+    goi: [{ word: "順調", reading: "じゅんちょう", meaning_burmese: "ချောမွေ့", jlpt_level: "N3" }],
     bunpou: [
       {
-        pattern: "～てください",
-        reading: "てください",
-        explanation_burmese: "လုပ်ပေးပါ",
-        usage_in_script: "座《すわ》ってください。",
-        usage_burmese: "ထိုင်ပေးပါဟု ပြောသည်။",
-        nuance_burmese: "တောင်းဆိုချက်",
-        context_example: "ちょっと待《ま》ってください。",
+        pattern: "～ことになっている",
+        reading: "ことになっている",
+        explanation_burmese: "စည်းကမ်းအရ ဖြစ်ရမည်",
+        usage_in_script: "靴《くつ》を脱《ぬ》ぐことになっている。",
+        usage_burmese: "ဖိနပ်ချွတ်ရမည်ဟု ပြောသည်။",
+        nuance_burmese: "ကိုယ်ပိုင်ဆုံးဖြတ်ချက်မဟုတ်",
+        context_example: "会議《かいぎ》は月曜《げつよう》に行《おこな》うことになっている。",
+        jlpt_level: "N3",
       },
     ],
   });
-  assert.equal(parsed.vocabulary[0]?.word, "駅");
-  assert.equal(parsed.grammar[0]?.pattern, "～てください");
-  assert.equal(parsed.grammar[0]?.usage_burmese, "ထိုင်ပေးပါ။");
-  assert.equal(parsed.grammar[0]?.nuance_burmese, "တောင်းဆိုချက်");
-  assert.match(parsed.grammar[0]?.context_example ?? "", /待/);
+  assert.equal(parsed.vocabulary[0]?.word, "順調");
+  assert.equal(parsed.grammar[0]?.pattern, "～ことになっている");
+  assert.equal(parsed.grammar[0]?.usage_burmese, "ဖိနပ်ချွတ်ရမည်။");
+  assert.equal(parsed.grammar[0]?.nuance_burmese, "ကိုယ်ပိုင်ဆုံးဖြတ်ချက်မဟုတ်");
+  assert.match(parsed.grammar[0]?.context_example ?? "", /会議/);
 });
 
 test("parses fenced JSON", () => {
@@ -113,7 +114,7 @@ test("strips Thai tokens like သัပတ from Burmese fields", () => {
         meaning_burmese: "ဒီ သัပတ",
         explanation_burmese: "ဒီสัปดาห์ အတွင်း လုပ်မည်။",
         example_sentence: "今週中にします。",
-        jlpt_level: "N4",
+        jlpt_level: "N3",
       },
     ],
     grammar: [],
@@ -124,6 +125,65 @@ test("strips Thai tokens like သัပတ from Burmese fields", () => {
   assert.equal(v.meaning_burmese.includes("สัปดาห์"), false);
   assert.equal(v.explanation_burmese.includes("สัปดาห์"), false);
   assert.match(v.explanation_burmese, /အတွင်း/);
+});
+
+test("keeps vocabulary and grammar across all JLPT levels", () => {
+  const parsed = payloadFromScriptGemini({
+    vocabulary: [
+      {
+        word: "打ち合わせ",
+        reading: "うちあわせ",
+        meaning_burmese: "ညှိနှိုင်း",
+        explanation_burmese: "ညှိနှိုင်းမည်။",
+        example_sentence: "打ち合わせです。",
+        jlpt_level: "N2",
+      },
+      {
+        word: "こんにちは",
+        reading: "こんにちは",
+        meaning_burmese: "မင်္ဂလာပါ",
+        explanation_burmese: "မင်္ဂလာပါ။",
+        example_sentence: "こんにちは。",
+        jlpt_level: "N5",
+      },
+      {
+        word: "齟齬",
+        reading: "そご",
+        meaning_burmese: "ကွဲလွဲမှု",
+        explanation_burmese: "ကွဲလွဲသည်။",
+        example_sentence: "齟齬がある。",
+        jlpt_level: "N1",
+      },
+    ],
+    grammar: [
+      {
+        pattern: "～ばかりか",
+        reading: "ばかりか",
+        explanation_burmese: "သာမက",
+        usage_in_script: "忙しいばかりか。",
+        usage_burmese: "အလုပ်များသည်သာမက။",
+        nuance_burmese: "အလေးပေး",
+        context_example: "高いばかりか。",
+        jlpt_level: "N2",
+      },
+      {
+        pattern: "～てしまう",
+        reading: "てしまう",
+        explanation_burmese: "ဖြစ်သွား",
+        usage_in_script: "忘れてしまった。",
+        usage_burmese: "မေ့သွားသည်။",
+        nuance_burmese: "နောင်တ",
+        context_example: "傘を忘れてしまった。",
+        jlpt_level: "N4",
+      },
+    ],
+  });
+  assert.equal(parsed.vocabulary.length, 3);
+  assert.deepEqual(
+    parsed.vocabulary.map((row) => row.jlpt_level),
+    ["N2", "N5", "N1"],
+  );
+  assert.equal(parsed.grammar.length, 2);
 });
 
 test("strips repeated meta speech endings from vocab explanations", () => {

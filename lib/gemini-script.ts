@@ -27,7 +27,8 @@ export const SCRIPT_GEMINI_FALLBACK_MODELS = [
 ] as const;
 
 const REQUEST_TIMEOUT_MS = 60_000;
-const SCRIPT_MAX_OUTPUT_TOKENS = 8_192;
+/** Higher budget so fuller vocab + grammar lists are not truncated mid-JSON. */
+const SCRIPT_MAX_OUTPUT_TOKENS = 32_768;
 const MAX_SCRIPT_CHARS = 28_000;
 
 export const SCRIPT_RESPONSE_SCHEMA: Schema = {
@@ -43,7 +44,10 @@ export const SCRIPT_RESPONSE_SCHEMA: Schema = {
           meaning_burmese: { type: Type.STRING },
           explanation_burmese: { type: Type.STRING },
           example_sentence: { type: Type.STRING },
-          jlpt_level: { type: Type.STRING },
+          jlpt_level: {
+            type: Type.STRING,
+            description: 'Estimated JLPT level: "N1"|"N2"|"N3"|"N4"|"N5"|""',
+          },
         },
         required: [
           "word",
@@ -67,7 +71,10 @@ export const SCRIPT_RESPONSE_SCHEMA: Schema = {
           usage_burmese: { type: Type.STRING },
           nuance_burmese: { type: Type.STRING },
           context_example: { type: Type.STRING },
-          jlpt_level: { type: Type.STRING },
+          jlpt_level: {
+            type: Type.STRING,
+            description: 'Estimated JLPT level: "N1"|"N2"|"N3"|"N4"|"N5"|""',
+          },
         },
         required: [
           "pattern",
@@ -149,7 +156,7 @@ export async function callScriptGenerateContent(options: {
 
   if (imageBase64) {
     parts.push({
-      text: "次の画像は日本語の聴解スクリプト／学習テキストです。画像を読み取り、vocabulary と grammar をJSONで返してください。",
+      text: "次の画像は日本語の聴解スクリプト／学習テキストです。画像を読み取り、スクリプト内の vocabulary と grammar をすべてJSONで返してください。一部だけに絞らないでください。",
     });
     parts.push({
       inlineData: {
@@ -161,7 +168,7 @@ export async function callScriptGenerateContent(options: {
 
   if (scriptText) {
     parts.push({
-      text: `次の日本語スクリプトを分析し、vocabulary と grammar をJSONで返してください。\n\n---\n${scriptText}\n---`,
+      text: `次の日本語スクリプトを分析し、vocabulary と grammar をすべてJSONで返してください。スクリプト内の語彙・文法はできるだけすべて列挙し、一部だけに絞らないでください。\n\n---\n${scriptText}\n---`,
     });
   }
 
