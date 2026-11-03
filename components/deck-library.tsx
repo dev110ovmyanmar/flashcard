@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   BookOpenText,
   ImagePlus,
@@ -67,14 +66,15 @@ export function DeckLibrary({
   const ordered = [...decks].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-10">
+    <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6 sm:px-6 sm:py-10">
       {/* Mode selector + hero scanner — generous vertical rhythm */}
       <section className="flex flex-col gap-8 sm:gap-10">
+        {/* Desktop / tablet: mode pills */}
         <nav
           aria-label="Study modes"
           className={[
             surfaceCard,
-            "flex flex-wrap items-center justify-center gap-1 p-1.5 sm:justify-start sm:px-2 sm:py-1.5",
+            "hidden flex-wrap items-center justify-start gap-1 px-2 py-1.5 sm:flex",
           ].join(" ")}
         >
           <button type="button" className={modePill} onClick={onType}>
@@ -190,14 +190,11 @@ export function DeckLibrary({
                     ? leadCard.reading
                     : "";
               return (
-                <motion.li
+                <li
                   key={deck.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(index, 8) * 0.04, type: "spring", stiffness: 260, damping: 26 }}
                   className={[
                     surfaceCard,
-                    "flex flex-col p-6 transition-shadow duration-200 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] sm:p-6",
+                    "flex flex-col p-6 transition-shadow duration-300 hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] sm:p-6",
                   ].join(" ")}
                 >
                   <button
@@ -263,7 +260,7 @@ export function DeckLibrary({
                       </Button>
                     </div>
                   </div>
-                </motion.li>
+                </li>
               );
             })}
           </ul>
@@ -302,6 +299,7 @@ export function DeckLibrary({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

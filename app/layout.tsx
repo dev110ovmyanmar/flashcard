@@ -55,7 +55,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${instrument.variable} ${sansJP.variable} ${serifJP.variable} ${myanmar.variable} h-full`}
     >
-      <body className="min-h-full">
+      <body className="min-h-dvh">
         <Providers>{children}</Providers>
       </body>
     </html>

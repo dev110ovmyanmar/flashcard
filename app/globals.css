@@ -131,9 +131,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Prevent horizontal scrollbar flash shifting the page sideways */
+    overflow-x: clip;
+    /* Keep layout width stable when vertical scrollbar appears/disappears */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    min-height: 100%;
+    min-height: 100dvh;
+    overflow-x: clip;
     background-image:
       radial-gradient(1100px 520px at -8% -10%, color-mix(in oklab, var(--primary) 16%, transparent), transparent 62%),
       radial-gradient(900px 480px at 108% -12%, color-mix(in oklab, var(--moss) 18%, transparent), transparent 58%);
@@ -144,35 +151,52 @@
   }
 }
 
-/* Soft cross-fade for browsers with same-document view transitions */
+/*
+ * Disable same-document View Transitions.
+ * Framer `PageTransition` already fades routes; stacking both caused flicker / jitter.
+ */
 @view-transition {
-  navigation: auto;
+  navigation: none;
 }
 
-::view-transition-old(root) {
-  animation: 160ms ease-in both sumi-vt-fade-out;
+/* Stable app chrome — reserves bottom nav space so route changes don’t reflow height */
+.app-chrome {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: clip;
 }
 
-::view-transition-new(root) {
-  animation: 220ms ease-out 40ms both sumi-vt-fade-in;
+.app-chrome__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
 }
 
-@keyframes sumi-vt-fade-out {
-  to {
-    opacity: 0;
+@media (max-width: 639px) {
+  .app-chrome--with-nav .app-chrome__main {
+    /* Match fixed bottom tab bar: 3.75rem + safe area */
+    padding-bottom: calc(3.75rem + env(safe-area-inset-bottom));
   }
 }
 
-@keyframes sumi-vt-fade-in {
-  from {
-    opacity: 0;
-  }
+/* Route shell used by PageTransition — hold height, GPU layer for fade */
+.page-shell {
+  min-height: 100%;
+  width: 100%;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Isolate paint so fade doesn’t dirty the sticky chrome */
+  contain: paint;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
+  .page-shell {
+    transition: none !important;
+    transform: none !important;
   }
 }
 

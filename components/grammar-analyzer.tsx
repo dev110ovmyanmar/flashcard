@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
 import { AnalyzerInputPanel } from "@/components/analyzer-input-panel";
 import { AnalysisSkeleton } from "@/components/analysis-skeleton";
+import { AnalyzerPageHeader } from "@/components/analyzer-page-header";
 import { GrammarQuestionCard } from "@/components/grammar-question-card";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestGrammarAnalyze, requestGrammarAnalyzeText } from "@/lib/client-grammar";
 import { fileToJpegBase64ForJlpt } from "@/lib/prepare-image";
@@ -15,7 +14,7 @@ import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
 type PreparedGrammarImage = { base64: string; previewUrl: string };
 
-const PAGE_TITLE = "Japanese Grammar Analyzer";
+const PAGE_TITLE = "Grammar";
 const MAX_TEXT_CHARS = 28_000;
 
 export function GrammarAnalyzer() {
@@ -108,24 +107,10 @@ export function GrammarAnalyzer() {
   const canAnalyze = inputMode === "text" ? textInput.trim().length > 0 : Boolean(prepared);
 
   return (
-    <div className="min-h-full">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <div className="mx-auto flex h-12 w-full max-w-4xl items-center justify-between gap-3 px-4 sm:h-14 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <Link
-              href="/"
-              className="inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/60 hover:text-foreground active:scale-[0.98]"
-            >
-              ← Decks
-            </Link>
-            <span className="hidden h-4 w-px bg-border/80 sm:block" aria-hidden />
-            <p className="truncate text-sm font-medium tracking-tight">{PAGE_TITLE}</p>
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+    <div className="flex min-h-full flex-col">
+      <AnalyzerPageHeader title={PAGE_TITLE} />
 
-      <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-[max(2rem,env(safe-area-inset-bottom))] sm:space-y-5 sm:px-6 sm:pt-7">
+      <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-6 sm:space-y-5 sm:px-6 sm:pt-7 sm:pb-8">
         <GeminiKeyNotice />
 
         <AnalyzerInputPanel
