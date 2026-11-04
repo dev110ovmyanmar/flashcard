@@ -24,11 +24,6 @@ export type GrammarOptionRow = {
   example_sentence: string;
   /** Natural Burmese translation of example_sentence. */
   example_burmese: string;
-  /**
-   * Why this option is wrong for the stem (Burmese).
-   * Empty string when this option is the correct answer.
-   */
-  why_wrong_burmese: string;
 };
 
 export type GrammarQuestion = {
@@ -96,7 +91,7 @@ export const JLPT_GRAMMAR_SYSTEM_PROMPT = `あなたはJLPT N2文法を教える
 
 # 簡潔さ（網羅性のための出力圧縮）
 - 全設問を返すため、各フィールドは短く保つ（冗長な言い換え・重複説明禁止）
-- usage_burmese / why_wrong_burmese / explanation_burmese / related_grammar_burmese は各1〜2文まで
+- usage_burmese / explanation_burmese / related_grammar_burmese は各1〜2文まで
 - example_sentence / example_burmese は各1文のみ
 - nuance / ニュアンス専用フィールドは出力しない（作らない）
 
@@ -114,15 +109,14 @@ export const JLPT_GRAMMAR_SYSTEM_PROMPT = `あなたはJLPT N2文法を教える
    - usage_burmese: いつ・どこで・どう使うか（口調・話し手の意図・場面）。ビルマ語。UI: ဘယ်နေရာမှာသုံးသလဲ
    - example_sentence: その文法が自然に使える短い日本語例文（1文）。漢字は《ひらがな》。正解・誤答どちらも必須
    - example_burmese: example_sentence の自然なビルマ語訳（1文）
-   - why_wrong_burmese: 誤答のみ、この空欄の文脈で合わない理由（ビルマ語）。正解は必ず ""
 7. explanation_burmese: 設問文の意味を踏まえ、なぜ正解（正解）が空欄にぴったり合うかを自然なビルマ語で説明。文中の日本語は 語《よみ》形式
 8. related_grammar_burmese: 試験の4選択肢の外にある、意味が近い混同しやすい文法との比較のみ（下記の厳守ルール）。UI: ရောတတ်သည့် Grammar များကို ရှင်းပြချက်
 
 # フィールド分離（厳守）
 - Options Evaluation（options_table / explanation_burmese）:
   - 試験の選択肢1〜4だけを扱う
-  - 各選択肢の意味・用法・例文・なぜ合う／合わないかを書く
-  - 誤答の理由は why_wrong_burmese。正解の正当化は explanation_burmese
+  - 各選択肢の意味・用法・例文を書く
+  - 正解の正当化は explanation_burmese
 - Confusing / Related Grammar（related_grammar_burmese）:
   - 学習を深めるための外部文法比較専用
   - 選択肢の再評価・誤答理由の繰り返しは禁止
@@ -173,7 +167,6 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
 - 設問文をよく読んでから書く。一般論だけの説明は禁止
 - explanation_burmese: 文が何を言っているか → なぜその文法が合うかをはっきり書く。大げさ・説教調は使わない
 - usage_burmese: 実際の使用場面・レジスター・話し手の意図を短く
-- why_wrong_burmese: その選択肢の意味は何か → この空欄／文脈になぜ合わないかを具体的に書く
 - example_sentence: 「例:」などのマーカーは付けない。日本語の実用例文のみ（1文）
 - example_burmese: マーカーなし。自然なビルマ語訳のみ（1文）
 - options_table[].meaning_burmese もコア訳のみ（長文説明禁止）
@@ -187,7 +180,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
   - 実在しない綴り「ဟောင်ဆောင်」（正: ဟန်ဆောင်）
   - 孤児の virama「္」や意味不明な文字の羅列
 - 正しい例: ဟန်ဆောင်နေသည်။ / သင့်သည် / လိုက်ပါ / လက်စ / တစ်လက်စတည်း / လျက်နဲ့
-- grammar_meaning_burmese / meaning_burmese / usage_burmese / example_burmese / explanation_burmese / related_grammar_burmese / why_wrong_burmese はすべてビルマ語本文必須。他言語の対訳・括弧注・スラッシュ対訳禁止
+- grammar_meaning_burmese / meaning_burmese / usage_burmese / example_burmese / explanation_burmese / related_grammar_burmese はすべてビルマ語本文必須。他言語の対訳・括弧注・スラッシュ対訳禁止
 - 機械翻訳調・ぎこちない直訳・意味不明な語を避ける。自信がない語は使わず、短く平易なビルマ語で言い換える
 - 学習者が読んですぐわかる口調。はっきり・短く・正確に
 - 日本語キーワードは必ず 語《ひらがな》で書く（例: ～にもかかわらず《にもかかわらず》、安心《あんしん》）。読みなしの裸の漢字・裸の文法語は禁止
@@ -197,7 +190,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
 - 有効なJSONのみ。Markdown・コードフェンス・前後説明禁止
 - ルート: { "questions": [ ... ] }
 - 設問キーのみ: questionNumber, questionText, correctAnswer, grammarPattern, grammar_meaning_burmese, options_table, explanation_burmese, related_grammar_burmese
-- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, example_sentence, example_burmese, why_wrong_burmese
+- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, example_sentence, example_burmese
 - nuance_burmese / nuance フィールドは禁止（出力しない）
 - 設問は番号順
 
@@ -218,8 +211,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
           "meaning_burmese": "သင့်သည် / လိုက်ပါ",
           "usage_burmese": "အကြံပေးခြင်း၊ သင့်သင့်လျော်လျော် လုပ်သင့်သည်ဟု ပြောသည့်အခါ သုံးသည်။ တိုက်ရိုက်ညွှန်ကြားချက်ထက် ပျော့သည်။",
           "example_sentence": "疲《つか》れたときは、ゆっくり休《やす》むことだ。",
-          "example_burmese": "ပင်ပန်းသောအခါ တဖြည်းဖြည်း အနားယူသင့်သည်။",
-          "why_wrong_burmese": ""
+          "example_burmese": "ပင်ပန်းသောအခါ တဖြည်းဖြည်း အနားယူသင့်သည်။"
         },
         {
           "option": "2",
@@ -228,8 +220,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
           "meaning_burmese": "အကြောင်းရင်း / ဆိုလိုသည်",
           "usage_burmese": "အကြောင်းရင်း သို့မဟုတ် နိဂုံးချုပ်ကို ပြောသည့်အခါ သုံးသည်။",
           "example_sentence": "雨《あめ》が降《ふ》っているから、道《みち》が混《こ》んでいるわけだ。",
-          "example_burmese": "မိုးရွာနေသောကြောင့် လမ်းပိတ်နေသည်ဟု ဆိုလိုသည်။",
-          "why_wrong_burmese": "အကြောင်းရင်းကို ပြသည်။ ‘လုပ်သင့်သည်’ အဓိပ္ပာယ် မပေး။"
+          "example_burmese": "မိုးရွာနေသောကြောင့် လမ်းပိတ်နေသည်ဟု ဆိုလိုသည်။"
         },
         {
           "option": "3",
@@ -238,8 +229,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
           "meaning_burmese": "ဖြစ်သင့်သည် / မျှော်မှန်း",
           "usage_burmese": "အချက်အလက်အရ မျှော်မှန်းချက်ကို ပြောသည့်အခါ သုံးသည်။",
           "example_sentence": "彼《かれ》はもう着《つ》いているはずだ。",
-          "example_burmese": "သူ ရောက်ပြီးဖြစ်သင့်သည်။",
-          "why_wrong_burmese": "မျှော်မှန်းချက်ကို ပြသည်။ အကြံပေးခြင်း မဟုတ်။"
+          "example_burmese": "သူ ရောက်ပြီးဖြစ်သင့်သည်။"
         },
         {
           "option": "4",
@@ -248,8 +238,7 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
           "meaning_burmese": "ဓလေ့ / သဘာဝ",
           "usage_burmese": "ယေဘုယျအလေ့အထ သို့မဟုတ် အံ့ဩမှုကို ပြောသည့်အခါ သုံးသည်။",
           "example_sentence": "子供《こども》のころはよく川《かわ》で遊《あそ》んだものだ。",
-          "example_burmese": "ကလေးဘဝတုန်းက မြစ်ထဲတွင် မကြာခဏ ကစားခဲ့လေ့ရှိသည်။",
-          "why_wrong_burmese": "ဓလေ့/အလေ့အထကို ပြသည်။ ဤနေရာ၏ အကြံပေးလေသံနှင့် မကိုက်။"
+          "example_burmese": "ကလေးဘဝတုန်းက မြစ်ထဲတွင် မကြာခဏ ကစားခဲ့လေ့ရှိသည်။"
         }
       ],
       "explanation_burmese": "ကျန်းမာရေး ထိန်းရန် စောအိပ် စောထရန် သင့်သည်ဟု အကြံပေးနေသည်။ ထို့ကြောင့် ～ことだ《ことだ》 က အဖြေမှန် ဖြစ်သည်။",

@@ -77,7 +77,6 @@ describe("GRAMMAR_RESPONSE_SCHEMA", () => {
       "usage_burmese",
       "example_sentence",
       "example_burmese",
-      "why_wrong_burmese",
     ]);
   });
 });
@@ -136,7 +135,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "အကြံပေးသည့်အခါ သုံးသည်။",
               example_sentence: "疲《つか》れたときは、ゆっくり休《やす》むことだ。",
               example_burmese: "ပင်ပန်းသောအခါ အနားယူသင့်သည်။",
-              why_wrong_burmese: "",
             },
             {
               option: "2",
@@ -146,7 +144,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "နိဂုံးချုပ်ကို ပြသည်။",
               example_sentence: "雨《あめ》が降《ふ》っているから混《こ》んでいるわけだ。",
               example_burmese: "မိုးရွာသောကြောင့် ပိတ်နေသည်ဟု ဆိုလိုသည်။",
-              why_wrong_burmese: "အကြံပေးခြင်း မဟုတ်။",
             },
           ],
           explanation_burmese: "လုပ်သင့်သည်ဟု အကြံပေးသောကြောင့် ことだ က 正解။",
@@ -162,7 +159,6 @@ describe("questionsFromGrammarGemini", () => {
     assert.equal(parsed.questions[0]?.correctAnswer, "1");
     assert.equal(parsed.questions[0]?.options_table.length, 2);
     assert.equal(parsed.questions[0]?.options_table[0]?.example_burmese, "ပင်ပန်းသောအခါ အနားယူသင့်သည်။");
-    assert.equal(parsed.questions[0]?.options_table[1]?.why_wrong_burmese, "အကြံပေးခြင်း မဟုတ်။");
   });
 
   it("keeps short Gemini meaning for header Line 2", () => {
@@ -200,7 +196,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "",
               example_sentence: "",
               example_burmese: "",
-              why_wrong_burmese: "မကိုက်။",
             },
             {
               option: "2",
@@ -210,7 +205,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "အသုံး။",
               example_sentence: "例文。",
               example_burmese: "ဥပမာ။",
-              why_wrong_burmese: "",
             },
           ],
           explanation_burmese: "—",
@@ -267,7 +261,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "ပင်ပန်းသည်သာမက 뿐만 아니라 အလုပ်များသည်။",
               example_sentence: "忙しいばかりか、疲れている。",
               example_burmese: "အလုပ်များသည်သာမက ပင်ပန်းသည်။ (not only)",
-              why_wrong_burmese: "",
             },
             {
               option: "2",
@@ -277,7 +270,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "",
               example_sentence: "",
               example_burmese: "",
-              why_wrong_burmese: "မကိုက်။ 뿐만",
             },
           ],
           explanation_burmese: "뿐만 아니라 / ထို့အပြင် ဟု ဆိုသည်။",
@@ -292,7 +284,6 @@ describe("questionsFromGrammarGemini", () => {
     assert.equal(q.options_table[0]?.meaning_burmese.includes("뿐만"), false);
     assert.equal(q.options_table[0]?.usage_burmese.includes("뿐만"), false);
     assert.equal(q.options_table[0]?.example_burmese.includes("not only"), false);
-    assert.equal(q.options_table[1]?.why_wrong_burmese.includes("뿐만"), false);
     assert.equal(q.explanation_burmese.includes("뿐만"), false);
   });
 
@@ -336,7 +327,6 @@ describe("questionsFromGrammarGemini", () => {
               usage_burmese: "ဒီสัปดาห์ အတွင်း လုပ်မည်။",
               example_sentence: "今週中にします。",
               example_burmese: "ဒီ သัပတ အတွင်း လုပ်မည်။",
-              why_wrong_burmese: "",
             },
           ],
           explanation_burmese: "ဒီสัปดาห์ အတွင်း။",
@@ -418,7 +408,6 @@ describe("mergeGrammarQuestions", () => {
           usage_burmese: "အကြံ",
           example_sentence: "休むことだ。",
           example_burmese: "အနားယူသင့်သည်။",
-          why_wrong_burmese: "",
         },
       ],
     };

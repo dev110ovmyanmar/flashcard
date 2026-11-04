@@ -180,17 +180,19 @@ export function GrammarAnalyzer() {
         ) : null}
 
         {hasResults ? (
-          <section className="space-y-3 sm:space-y-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                Results
-              </p>
-              <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground">
-                {questions.length} question{questions.length === 1 ? "" : "s"}
-              </h2>
+          <section className="space-y-4 sm:space-y-5">
+            <div className="flex items-end justify-between gap-3 px-0.5">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  Results
+                </p>
+                <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+                  {questions.length} question{questions.length === 1 ? "" : "s"}
+                </h2>
+              </div>
             </div>
 
-            <div className="grid gap-3">
+            <div className="grid gap-3.5 sm:gap-4">
               {questions.map((question, index) => (
                 <GrammarQuestionCard
                   key={`${question.questionNumber}-${index}-${question.grammarPattern}`}

@@ -107,11 +107,6 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
                   type: Type.STRING,
                   description: "Natural Burmese translation of example_sentence",
                 },
-                why_wrong_burmese: {
-                  type: Type.STRING,
-                  description:
-                    "Why this option is wrong in context (Burmese). Empty string for the correct answer",
-                },
               },
               required: [
                 "option",
@@ -121,7 +116,6 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
                 "usage_burmese",
                 "example_sentence",
                 "example_burmese",
-                "why_wrong_burmese",
               ],
             },
           },
@@ -796,9 +790,6 @@ function tidyOptionRow(value: unknown): GrammarOptionRow | null {
   const example_burmese = stripForeignGlosses(
     asString(value.example_burmese ?? value.exampleBurmese ?? value.example_translation_burmese),
   );
-  const why_wrong_burmese = stripForeignGlosses(
-    asString(value.why_wrong_burmese ?? value.whyWrongBurmese ?? value.why_wrong ?? value.reason),
-  );
 
   if (!option && !japanese && !meaning_burmese) return null;
 
@@ -810,7 +801,6 @@ function tidyOptionRow(value: unknown): GrammarOptionRow | null {
     usage_burmese,
     example_sentence,
     example_burmese,
-    why_wrong_burmese,
   };
 }
 
@@ -827,7 +817,6 @@ function synthesizeOptionsFromLegacy(input: {
   if (parts.options.length >= 2) {
     return parts.options.map((opt) => {
       const distractor = byOption.get(opt.label.trim());
-      const correct = opt.label.trim() === input.correctAnswer.trim();
       return {
         option: opt.label,
         japanese: opt.text,
@@ -836,7 +825,6 @@ function synthesizeOptionsFromLegacy(input: {
         usage_burmese: "",
         example_sentence: distractor?.example ?? "",
         example_burmese: "",
-        why_wrong_burmese: correct ? "" : distractor?.body ?? "",
       };
     });
   }
@@ -849,7 +837,6 @@ function synthesizeOptionsFromLegacy(input: {
     usage_burmese: "",
     example_sentence: item.example,
     example_burmese: "",
-    why_wrong_burmese: item.body,
   }));
 }
 
