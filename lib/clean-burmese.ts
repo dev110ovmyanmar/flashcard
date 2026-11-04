@@ -1,6 +1,7 @@
 /**
  * Sanitize model output meant to be Myanmar (Burmese) only.
- * Models sometimes inject Thai (e.g. สัปดาห์ / mixed သัပတ), Korean, Devanagari/Hindi (e.g. अग),
+ * Models sometimes inject Thai (e.g. สัปดาห์ / mixed သัပတ), Korean Hangul (e.g. 하기로),
+ * Bengali lookalikes (e.g. ဥপমা for ဥပမာ), Devanagari/Hindi (e.g. अग),
  * Hebrew, Khmer, or English glosses, and invent broken Myanmar orthography
  * (e.g. င်္ဟောင်ဆောင်နေသည် → ဟန်ဆောင်နေသည်).
  */
@@ -50,22 +51,28 @@ export function repairBrokenMyanmar(text: string): string {
 /**
  * Remove non-Burmese gloss leftovers from Burmese fields.
  * Thai tokens (incl. mixed သัပတ) are removed as whole words.
- * Lookalike ဥပမာ garbles (Latin p / Hebrew pe) are normalized first.
+ * Lookalike ဥပမာ garbles (Latin p / Hebrew pe / Bengali প) are normalized first.
  */
 export function stripForeignGlosses(text: string): string {
   if (!text) return "";
   return stripMetaSpeechEnding(
     repairBrokenMyanmar(
       text
-        // ဥပမာ with Latin p or Hebrew pe (פ) instead of Myanmar ပ
-        .replace(/ဥ[pPפ]မာ/gu, "ဥပမာ")
+        // ဥပမာ garbles: Latin p, Hebrew pe, Bengali প/মা (e.g. ဥপমা, ဥপမာ)
+        .replace(/ဥ(?:[pPפ]|[\u0980-\u09FF]+)(?:မာ|[\u09AE\u09BE]+)?/gu, "ဥပမာ")
         // Any token containing Thai script (U+0E00–U+0E7F), e.g. สัปดาห์ or mixed သัပတ
         .replace(/[^\s/|·•—–.,;:。、()（）]*[\u0E00-\u0E7F][^\s/|·•—–.,;:。、()（）]*/gu, "")
-        // Hangul syllables + compatibility jamo (e.g. 뿐만 아니라)
-        .replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]+(?:\s*[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7A3]+)*/g, "")
+        // Hangul (하기로, 뿐만 아니라, …) — jamo + syllables + extended
+        .replace(
+          /[\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7AF]+(?:\s*[\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7AF]+)*/g,
+          "",
+        )
         // Devanagari / Hindi (e.g. अग) — whole tokens that contain any Devanagari letter
         .replace(/[^\s/|·•—–.,;:。、()（）]*[\u0900-\u097F][^\s/|·•—–.,;:。、()（）]*/gu, "")
         .replace(/[\u0900-\u097F]+/gu, "")
+        // Bengali / Assamese leftovers (after ဥပမာ normalize)
+        .replace(/[^\s/|·•—–.,;:。、()（）]*[\u0980-\u09FF][^\s/|·•—–.,;:。、()（）]*/gu, "")
+        .replace(/[\u0980-\u09FF]+/gu, "")
         // Hebrew (remaining runs after ဥပမာ normalize)
         .replace(/[\u0590-\u05FF]+/g, "")
         // Khmer

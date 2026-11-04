@@ -7,6 +7,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  ScanText,
   ScrollText,
   Sparkles,
   Trash2,
@@ -92,6 +93,10 @@ export function DeckLibrary({
           <Link href="/script-analyzer" className={modePill}>
             <ScrollText aria-hidden />
             Script
+          </Link>
+          <Link href="/dokai-analyzer" className={modePill}>
+            <ScanText aria-hidden />
+            Dokai
           </Link>
         </nav>
 

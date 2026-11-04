@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
@@ -7,14 +8,16 @@ import { AnalyzerInputPanel } from "@/components/analyzer-input-panel";
 import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { AnalyzerPageHeader } from "@/components/analyzer-page-header";
 import { GrammarQuestionCard } from "@/components/grammar-question-card";
+import { Button } from "@/components/ui/button";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestGrammarAnalyze, requestGrammarAnalyzeText } from "@/lib/client-grammar";
 import { fileToJpegBase64ForJlpt } from "@/lib/prepare-image";
 import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
+import { UI } from "@/src/constants/uiCopy";
 
 type PreparedGrammarImage = { base64: string; previewUrl: string };
 
-const PAGE_TITLE = "Grammar";
+const PAGE_TITLE = UI.page.grammar;
 const MAX_TEXT_CHARS = 28_000;
 
 export function GrammarAnalyzer() {
@@ -75,6 +78,10 @@ export function GrammarAnalyzer() {
     setDragging(false);
   }
 
+  function startNewAnalysis() {
+    clearSelection();
+  }
+
   async function analyze() {
     const trimmed = textInput.trim();
     const usingText = inputMode === "text";
@@ -93,7 +100,7 @@ export function GrammarAnalyzer() {
         : await requestGrammarAnalyze(prepared!.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setQuestions(result.questions);
-      if (result.source === "cache") toast.message("Loaded from cache");
+      if (result.source === "cache") toast.message(UI.results.cacheLoaded);
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
       setQuestions([]);
@@ -104,6 +111,7 @@ export function GrammarAnalyzer() {
   }
 
   const hasResults = questions.length > 0;
+  const showInput = !hasResults;
   const canAnalyze = inputMode === "text" ? textInput.trim().length > 0 : Boolean(prepared);
 
   return (
@@ -113,43 +121,45 @@ export function GrammarAnalyzer() {
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-6 sm:space-y-5 sm:px-6 sm:pt-7 sm:pb-8">
         <GeminiKeyNotice />
 
-        <AnalyzerInputPanel
-          mode={inputMode}
-          onModeChange={switchMode}
-          analyzing={analyzing}
-          canAnalyze={canAnalyze}
-          geminiReady={geminiReady === true}
-          dragging={dragging}
-          prepared={prepared}
-          textInput={textInput}
-          maxTextChars={MAX_TEXT_CHARS}
-          imageHint="PNG, JPG, or WebP · Grammar / ★"
-          imageAlt="Selected grammar page"
-          textTitle="Paste or type grammar text"
-          textHint="Grammar / ★ questions with options"
-          textPlaceholder={"1\n彼は忙しい_____、いつも笑顔で対応してくれる。\n1. にもかかわらず\n2. にかかわらず\n3. にせよ\n4. とはいえ"}
-          textareaId="grammar-text-input"
-          onTextChange={(value) => {
-            setTextInput(value);
-            setPrepared(null);
-            setError(null);
-            setQuestions([]);
-          }}
-          onPickFile={() => fileRef.current?.click()}
-          onPickCamera={() => cameraRef.current?.click()}
-          onClear={clearSelection}
-          onAnalyze={() => void analyze()}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            void takeFile(event.dataTransfer.files?.[0] ?? null);
-          }}
-        />
+        {showInput ? (
+          <AnalyzerInputPanel
+            mode={inputMode}
+            onModeChange={switchMode}
+            analyzing={analyzing}
+            canAnalyze={canAnalyze}
+            geminiReady={geminiReady === true}
+            dragging={dragging}
+            prepared={prepared}
+            textInput={textInput}
+            maxTextChars={MAX_TEXT_CHARS}
+            imageHint={UI.hints.grammarImage}
+            imageAlt={UI.hints.grammarImageAlt}
+            textTitle={UI.hints.grammarTextTitle}
+            textHint={UI.hints.grammarTextHint}
+            textPlaceholder={"1\n彼は忙しい_____、いつも笑顔で対応してくれる。\n1. にもかかわらず\n2. にかかわらず\n3. にせよ\n4. とはいえ"}
+            textareaId="grammar-text-input"
+            onTextChange={(value) => {
+              setTextInput(value);
+              setPrepared(null);
+              setError(null);
+              setQuestions([]);
+            }}
+            onPickFile={() => fileRef.current?.click()}
+            onPickCamera={() => cameraRef.current?.click()}
+            onClear={clearSelection}
+            onAnalyze={() => void analyze()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              void takeFile(event.dataTransfer.files?.[0] ?? null);
+            }}
+          />
+        ) : null}
 
         {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 
@@ -176,7 +186,7 @@ export function GrammarAnalyzer() {
         />
 
         {analyzing && !hasResults ? (
-          <AnalysisSkeleton label="Reading the grammar page…" cards={3} />
+          <AnalysisSkeleton label={UI.hints.grammarLoading} cards={3} />
         ) : null}
 
         {hasResults ? (
@@ -184,12 +194,20 @@ export function GrammarAnalyzer() {
             <div className="flex items-end justify-between gap-3 px-0.5">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Results
+                  {UI.results.results}
                 </p>
                 <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                  {questions.length} question{questions.length === 1 ? "" : "s"}
+                  {UI.results.questions(questions.length)}
                 </h2>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0 gap-1.5 rounded-lg px-2.5 text-xs font-medium"
+                onClick={startNewAnalysis}
+              >
+                <Plus className="size-3.5" aria-hidden />{UI.results.new}</Button>
             </div>
 
             <div className="grid gap-3.5 sm:gap-4">

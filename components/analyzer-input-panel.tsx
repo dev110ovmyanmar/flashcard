@@ -8,6 +8,7 @@ import {
 } from "@/components/analyzer-input-mode";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { UI } from "@/src/constants/uiCopy";
 
 const surface =
   "rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] backdrop-blur-sm dark:border-border/50 dark:ring-white/[0.03]";
@@ -130,7 +131,7 @@ export function AnalyzerInputPanel({
                   onClick={onClear}
                 >
                   <X />
-                  Clear
+                  {UI.input.clear}
                 </Button>
               </div>
             </div>
@@ -140,7 +141,7 @@ export function AnalyzerInputPanel({
                 <ImagePlus className="size-5" />
               </div>
               <p className="mt-3 text-sm font-medium tracking-tight text-foreground">
-                Drop an image here
+                {UI.input.dropImage}
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">{imageHint}</p>
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -152,7 +153,7 @@ export function AnalyzerInputPanel({
                   onClick={onPickFile}
                 >
                   <ImagePlus />
-                  Upload
+                  {UI.input.upload}
                 </Button>
                 <Button
                   type="button"
@@ -162,7 +163,7 @@ export function AnalyzerInputPanel({
                   onClick={onPickCamera}
                 >
                   <Camera />
-                  Camera
+                  {UI.input.camera}
                 </Button>
               </div>
             </div>
@@ -170,11 +171,13 @@ export function AnalyzerInputPanel({
         </div>
       ) : (
         <div className="space-y-3 px-4 py-5 sm:px-5 sm:py-6">
-          <div className="flex items-end justify-between gap-3">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium tracking-tight text-foreground">{textTitle}</p>
+              <label htmlFor={textareaId} className="block text-sm font-medium tracking-tight text-foreground">
+                {textTitle}
+              </label>
               {textHint ? (
-                <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{textHint}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{textHint}</p>
               ) : null}
             </div>
             {hasInput ? (
@@ -186,20 +189,17 @@ export function AnalyzerInputPanel({
                 onClick={onClear}
               >
                 <X />
-                Clear
+                {UI.input.clear}
               </Button>
             ) : null}
           </div>
 
-          <label className="sr-only" htmlFor={textareaId}>
-            {textTitle}
-          </label>
           <Textarea
             id={textareaId}
             value={textInput}
             disabled={analyzing}
             placeholder={textPlaceholder}
-            className="min-h-48 w-full resize-y rounded-xl border-border/60 bg-background/80 px-4 py-3.5 text-left text-sm leading-7 shadow-none focus-visible:ring-ring/40 sm:min-h-56"
+            className="min-h-48 w-full resize-y rounded-xl border-border/60 bg-background/80 px-4 py-3.5 text-left text-sm leading-7 shadow-none placeholder:text-muted-foreground/55 focus-visible:ring-ring/40 sm:min-h-56"
             onChange={(event) => onTextChange(event.target.value.slice(0, maxTextChars))}
           />
           <p className="text-right text-[11px] leading-5 text-muted-foreground tabular-nums">
@@ -216,7 +216,7 @@ export function AnalyzerInputPanel({
           onClick={onAnalyze}
         >
           {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
-          <span>{analyzing ? "Analyzing…" : "Analyze"}</span>
+          <span>{analyzing ? UI.input.analyzing : UI.input.analyze}</span>
         </button>
       </div>
     </section>

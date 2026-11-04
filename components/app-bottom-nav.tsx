@@ -1,10 +1,11 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BookOpenText, Layers, ScrollText, Sparkles } from "lucide-react";
+import { BookOpenText, Layers, ScanText, ScrollText, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { UI } from "@/src/constants/uiCopy";
 
-export type AppBottomTab = "decks" | "vocab" | "grammar" | "script";
+export type AppBottomTab = "decks" | "vocab" | "grammar" | "script" | "dokai";
 
 const EASE_SMOOTH: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
@@ -14,10 +15,11 @@ const TABS: Array<{
   label: string;
   icon: typeof Layers;
 }> = [
-  { id: "decks", href: "/", label: "Decks", icon: Layers },
-  { id: "vocab", href: "/jlpt-analyzer", label: "Vocab", icon: Sparkles },
-  { id: "grammar", href: "/grammar-analyzer", label: "Grammar", icon: BookOpenText },
-  { id: "script", href: "/script-analyzer", label: "Script", icon: ScrollText },
+  { id: "decks", href: "/", label: UI.nav.decks, icon: Layers },
+  { id: "vocab", href: "/jlpt-analyzer", label: UI.nav.vocab, icon: Sparkles },
+  { id: "grammar", href: "/grammar-analyzer", label: UI.nav.grammar, icon: BookOpenText },
+  { id: "script", href: "/script-analyzer", label: UI.nav.script, icon: ScrollText },
+  { id: "dokai", href: "/dokai-analyzer", label: UI.nav.dokai, icon: ScanText },
 ];
 
 /**
@@ -26,7 +28,7 @@ const TABS: Array<{
 export function AppBottomNav({ active }: { active: AppBottomTab }) {
   return (
     <nav
-      aria-label="App"
+      aria-label={UI.nav.aria}
       className={[
         "fixed inset-x-0 bottom-0 z-40 sm:hidden",
         "border-t border-border/60 bg-background/90 backdrop-blur-xl",

@@ -9,7 +9,14 @@ const MAX_ENTRIES = 24;
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_VALUE_CHARS = 1_200_000;
 
-export type AnalysisCacheKind = "ocr" | "jlpt" | "grammar" | "script-text" | "script-image";
+export type AnalysisCacheKind =
+  | "ocr"
+  | "jlpt"
+  | "grammar"
+  | "script-text"
+  | "script-image"
+  | "dokai-image"
+  | "dokai-text";
 
 type CacheIndexItem = { key: string; savedAt: number; kind: AnalysisCacheKind };
 

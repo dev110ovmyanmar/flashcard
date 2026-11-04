@@ -9,6 +9,7 @@ function tabFromPath(pathname: string): AppBottomTab | null {
   if (pathname.startsWith("/jlpt-analyzer")) return "vocab";
   if (pathname.startsWith("/grammar-analyzer")) return "grammar";
   if (pathname.startsWith("/script-analyzer")) return "script";
+  if (pathname.startsWith("/dokai-analyzer")) return "dokai";
   return null;
 }
 

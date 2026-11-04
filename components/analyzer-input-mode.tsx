@@ -1,6 +1,7 @@
 "use client";
 
 import { ImageIcon, Type } from "lucide-react";
+import { UI } from "@/src/constants/uiCopy";
 
 export type AnalyzerInputMode = "image" | "text";
 
@@ -22,7 +23,7 @@ export function AnalyzerInputModeSwitcher({
   onChange,
 }: AnalyzerInputModeSwitcherProps) {
   return (
-    <div className={switcherShell} role="tablist" aria-label="Input mode">
+    <div className={switcherShell} role="tablist" aria-label={UI.input.modeAria}>
       <button
         type="button"
         role="tab"
@@ -38,7 +39,7 @@ export function AnalyzerInputModeSwitcher({
         onClick={() => onChange("image")}
       >
         <ImageIcon aria-hidden />
-        <span>Image</span>
+        <span>{UI.input.image}</span>
       </button>
       <button
         type="button"
@@ -55,7 +56,7 @@ export function AnalyzerInputModeSwitcher({
         onClick={() => onChange("text")}
       >
         <Type aria-hidden />
-        <span>Text</span>
+        <span>{UI.input.text}</span>
       </button>
     </div>
   );

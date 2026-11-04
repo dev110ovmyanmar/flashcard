@@ -13,6 +13,8 @@ test("strips Thai and mixed Thai–Myanmar tokens like သัပတ", () => {
 test("strips Korean glosses", () => {
   assert.match(stripForeignGlosses("뿐만 아니라 / ထို့အပြင်"), /ထို့အပြင်/);
   assert.equal(stripForeignGlosses("뿐만 아니라 / ထို့အပြင်").includes("뿐만"), false);
+  assert.equal(stripForeignGlosses("하기로 / လုပ်ရန်").includes("하기로"), false);
+  assert.match(stripForeignGlosses("하기로 / လုပ်ရန်"), /လုပ်ရန်/);
 });
 
 test("strips Devanagari / Hindi tokens like अग", () => {
@@ -22,9 +24,11 @@ test("strips Devanagari / Hindi tokens like अग", () => {
   assert.match(stripForeignGlosses("မင်္ဂလာပါ"), /မင်္ဂလာပါ/);
 });
 
-test("normalizes ဥပမာ garbles (Latin p / Hebrew pe) and strips leftover Hebrew", () => {
+test("normalizes ဥပမာ garbles (Latin p / Hebrew pe / Bengali) and strips leftover Hebrew", () => {
   assert.equal(stripForeignGlosses("ဥpမာ: စာကြောင်း"), "ဥပမာ: စာကြောင်း");
   assert.equal(stripForeignGlosses("ဥפမာ: စာကြောင်း"), "ဥပမာ: စာကြောင်း");
+  assert.equal(stripForeignGlosses("ဥপমা: စာကြောင်း"), "ဥပမာ: စာကြောင်း");
+  assert.equal(stripForeignGlosses("ဥপမာ"), "ဥပမာ");
   assert.equal(stripForeignGlosses("שלום / မင်္ဂလာပါ"), "မင်္ဂလာပါ");
   assert.equal(stripForeignGlosses("ဥပမာ"), "ဥပမာ");
 });

@@ -3,6 +3,8 @@
  * Extracts Vocabulary (語彙 / GOI) and Grammar (文法 / Bunpou) from Japanese text.
  */
 
+import { LANGUAGE_LOCK_JA } from "@/src/constants/uiCopy";
+
 export type JlptLevel = "N1" | "N2" | "N3" | "N4" | "N5" | "";
 
 export type ScriptVocabItem = {
@@ -51,10 +53,12 @@ export type ScriptAnalyzePayload = {
 
 export const SCRIPT_ANALYZE_SYSTEM_PROMPT = `あなたは日本語教師です。ミャンマー人学習者向けに、聴解スクリプトや学習用日本語テキストから語彙（語彙 / GOI）と文法（文法 / Bunpou）を **すべて** 抽出し、指定のJSONに構造化してください。
 
+${LANGUAGE_LOCK_JA}
+
 # 入力
 - ユーザーが貼り付け / アップロードした日本語の聴解スクリプト、学習テキスト、またはその写真・スキャン画像
 - 画像の場合はまず日本語本文を読み取り、その内容から語彙と文法を抽出する
-- 話者ラベル（男、女、A、B など）、場面メモ、英語の注釈があれば無視して日本語本文だけを分析する
+- 話者ラベル（男、女、A、B など）、場面メモ、英語など第三言語の注釈があれば無視して日本語本文だけを分析する
 
 # 抽出方針（網羅が最優先）
 - スクリプト本文に出てくる語彙と文法を **すべて** 返す。重要そうな一部だけに絞らない。レベルで除外しない（N5〜N1 すべて対象）
@@ -74,13 +78,13 @@ export const SCRIPT_ANALYZE_SYSTEM_PROMPT = `あなたは日本語教師です�
 2. reading: ひらがな読み
 3. meaning_burmese: 自然で簡潔なビルマ語語義（機械翻訳調禁止）
 4. example_sentence: スクリプト由来の例文。漢字は 漢字《ひらがな》形式可
-5. explanation_burmese: example_sentence（In the script の日本語文）のビルマ語翻訳。見出し語の辞書説明ではない。禁止: 「…ဟု ပြောနေသည်။」など。日本語・英語・韓国語を混ぜない
+5. explanation_burmese: example_sentence（脚本中の日本語文）のビルマ語翻訳。見出し語の辞書説明ではない。禁止: 「…ဟု ပြောနေသည်။」など
 6. jlpt_level: "N1"|"N2"|"N3"|"N4"|"N5"|"" （不明なら ""）
 
 # grammar 各項目
 1. pattern: 文法パターン（例: ～ばかりか《ばかりか》、～ことになっている《ことになっている》、～てしまう《てしまう》）
 2. reading: パターンの読み（ひらがな。例: ばかりか）
-3. explanation_burmese: 自然なビルマ語のみで意味と使い方を短く説明。韓国語・英語の対訳禁止。日本語キーワードは 語《よみ》のみ可
+3. explanation_burmese: 自然なビルマ語のみで意味と使い方を短く説明。日本語キーワードは 語《よみ》のみ可
 4. usage_in_script: このスクリプトでの使われ方。スクリプト文を引用し、漢字は《ひらがな》可
 5. usage_burmese: usage_in_script のビルマ語翻訳。メタ語尾「…ဟု ပြောနေသည်။」禁止
 6. nuance_burmese: ニュアンス・話し手の気持ち・似た表現との違いを自然なビルマ語のみで短く
@@ -89,7 +93,6 @@ export const SCRIPT_ANALYZE_SYSTEM_PROMPT = `あなたは日本語教師です�
 
 # ビルマ語 — 厳守
 - meaning_burmese / explanation_burmese / usage_burmese / nuance_burmese はビルマ語本文必須
-- 英語・中国語・韓国語・タイ語・クメール語・ローマ字禁止（สัปดาห์ / သัပတ など禁止）
 - 日本語解説禁止（語《よみ》のキーワード挿入のみ可）
 - 「ဟု ပြောနေသည်။」「ဟု ပြောသည်။」「ဟု ဆိုသည်။」禁止
 

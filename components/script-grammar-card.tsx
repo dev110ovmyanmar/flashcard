@@ -6,6 +6,7 @@ import { FuriganaHover } from "@/components/furigana-hover";
 import { Badge } from "@/components/ui/badge";
 import { harvestMarkupReadings } from "@/lib/furigana";
 import type { ScriptGrammarItem } from "@/src/constants/scriptPrompt";
+import { UI } from "@/src/constants/uiCopy";
 
 /** 4/8px-grid icon action — tactile save control */
 const btnSave =
@@ -234,7 +235,7 @@ export function ScriptGrammarCard({
             >
               <span className="min-w-0 pr-1">
                 <span className="block text-[13px] leading-5 font-semibold tracking-tight text-foreground">
-                  Explanation & Context
+                  {UI.card.explanationContext}
                 </span>
                 <span
                   lang="my"
@@ -268,13 +269,13 @@ export function ScriptGrammarCard({
               <div className="overflow-hidden">
                 <div className="space-y-2 border-t border-border/35 px-2.5 pt-2.5 pb-3 sm:space-y-2 sm:px-3 sm:pt-3 sm:pb-3.5 dark:border-white/[0.06]">
                   {item.explanation_burmese ? (
-                    <DetailBlock label="Explanation">
+                    <DetailBlock label={UI.card.explanation}>
                       <MyanmarProse text={item.explanation_burmese} readings={readings} />
                     </DetailBlock>
                   ) : null}
 
                   {item.usage_in_script || item.usage_burmese ? (
-                    <DetailBlock label="In the script" tone="correct">
+                    <DetailBlock label={UI.card.inScript} tone="correct">
                       <JapaneseProse text={item.usage_in_script} readings={readings} correct />
                       {item.usage_burmese ? (
                         <FuriganaHover
@@ -288,7 +289,7 @@ export function ScriptGrammarCard({
                   ) : null}
 
                   {item.nuance_burmese ? (
-                    <DetailBlock label="Nuance">
+                    <DetailBlock label={UI.card.nuance}>
                       <MyanmarProse text={item.nuance_burmese} readings={readings} />
                     </DetailBlock>
                   ) : null}

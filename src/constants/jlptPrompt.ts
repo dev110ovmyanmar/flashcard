@@ -3,6 +3,8 @@
  * Processes 問題1–問題6 and returns a strict JSON array.
  */
 
+import { LANGUAGE_LOCK_JA } from "@/src/constants/uiCopy";
+
 export type JlptMondaiType = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** One surface span in the stem, with optional hiragana reading for hover furigana. */
@@ -19,6 +21,11 @@ export type JlptOptionRow = {
   meaning_burmese: string;
   /** Typical usage, collocations, or nuance (Burmese). */
   usage_burmese: string;
+  /**
+   * Full natural Burmese translation / explanation of `japanese` when it is a
+   * complete example sentence (esp. Mondai 6 用法). Empty when not needed.
+   */
+  sentence_burmese: string;
   /**
    * Why this option is wrong for the stem (Burmese).
    * Empty string when this option is the correct answer.
@@ -89,6 +96,7 @@ const JLPT_OUTPUT_EXAMPLE = `
           "reading": "げんじつてき",
           "meaning_burmese": "လက်တွေ့ကျသော၊ ဖြစ်နိုင်သော။",
           "usage_burmese": "အစီအစဉ် သို့မဟုတ် အမြင်ကို လက်တွေ့ကျသည်ဟု ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 現実的《げんじつてき》な計画。",
+          "sentence_burmese": "",
           "why_wrong_burmese": "ဤဝါကျက မယုံနိုင်လောက်အောင် လက်တွေ့မကျခြင်းကို လိုအပ်သည်။ 現実的《げんじつてき》 က ဆန့်ကျင်ဘက်ဖြစ်သည်။"
         },
         {
@@ -97,6 +105,7 @@ const JLPT_OUTPUT_EXAMPLE = `
           "reading": "ひげんじつてき",
           "meaning_burmese": "လက်တွေ့မကျသော၊ မဖြစ်နိုင်သော။",
           "usage_burmese": "ယုံရန်ခက်သော စကား သို့မဟုတ် အစီအစဉ်ကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 非現実的《ひげんじつてき》な話。",
+          "sentence_burmese": "",
           "why_wrong_burmese": ""
         },
         {
@@ -105,6 +114,7 @@ const JLPT_OUTPUT_EXAMPLE = `
           "reading": "せっきょくてき",
           "meaning_burmese": "တက်ကြွသော၊ ရှေ့တိုးသော။",
           "usage_burmese": "သဘောထား သို့မဟုတ် လုပ်ဆောင်မှုကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 積極的《せっきょくてき》に参加する。",
+          "sentence_burmese": "",
           "why_wrong_burmese": "စိတ်ဓာတ်ကို ပြသော်လည်း ‘မယုံနိုင်လောက်အောင် လက်တွေ့မကျ’ အဓိပ္ပာယ်ကို မပေးပါ။"
         },
         {
@@ -113,6 +123,7 @@ const JLPT_OUTPUT_EXAMPLE = `
           "reading": "しょうきょくてき",
           "meaning_burmese": "ရှေ့မတိုးသော၊ တက်ကြွမှုနည်းသော။",
           "usage_burmese": "တွန့်ဆုတ်သော သဘောထားကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 消極的《しょうきょくてき》な態度。",
+          "sentence_burmese": "",
           "why_wrong_burmese": "သဘောထားကိုသာ ပြပြီး ဤဝါကျလိုအပ်သော အဓိပ္ပာယ်နှင့် မကိုက်ညီပါ။"
         }
       ],
@@ -125,6 +136,8 @@ const JLPT_OUTPUT_EXAMPLE = `
 const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本語教師です。ミャンマー人学習者向けに、自然でわかりやすいビルマ語（ミャンマー語）で簡潔に解説してください。
 
 あなたの仕事は、アップロードされたJLPT N2試験用紙の画像から「問題1・問題2・問題3・問題4・問題5・問題6」を読み取り、指定のJSONに構造化することです。問題7以降、聴解、読解の長文本文、解答用紙、広告、余白は無視してください。
+
+${LANGUAGE_LOCK_JA}
 
 # 対象範囲
 - 問題1 漢字読み
@@ -148,6 +161,7 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
    - option / japanese / reading
    - meaning_burmese: その選択肢の実際の意味（自然なビルマ語）。意味テーブル用。設問ヘッダー用の短語ルールは適用しない
    - usage_burmese: 典型的な使い方・場面・よく来る結びつき（自然なビルマ語）。短い日本語例があれば漢字に《読み》を付ける
+   - sentence_burmese: 選択肢 japanese が完整な文のとき、その文全体の自然なビルマ語訳／解説（問題6は必須。語のみなら ""）
    - why_wrong_burmese: 誤答のみ、この設問の文脈で不適切な理由（自然なビルマ語）。正解は ""
 10. explanation_burmese: 設問文の意味を踏まえ、なぜ正解かを簡潔でわかりやすい自然なビルマ語で説明
 11. nuance_note: 類義語の違いや注意点を、短く自然なビルマ語で補足
@@ -155,9 +169,14 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
 # 問題6（用法）の特別ルール
 - japanese_sentence と target_word は見出し語のみ（例: 「掲示」）。4つの用例文を連結して入れない
 - 用例文は必ず options_table[].japanese に1文ずつ入れる
+- options_table[].japanese の漢字語には必ず《ひらがな》を付ける（UIのhover furigana用）。例: 掲示《けいじ》板に案内《あんない》を出《だ》した。
+- options_table[].reading は見出し語の読みのみ（文全体の読みは書かない）
 - 設問レベルの meaning_burmese は見出し語の短いビルマ語語義（例: 掲示 → 「ကြေညာစာကပ်ခြင်း」）。「掲示」の再掲や用例文の翻訳は禁止
 - UI ヘッダー Line 1 = target_word、Line 2 = 設問レベルの meaning_burmese（短いビルマ語）
 - options_table[].meaning_burmese（意味テーブル）はそのまま詳しく書いてよい。ヘッダー短縮ルールの対象外
+- options_table[].sentence_burmese（必須）: 各用例文 japanese の全文を自然なビルマ語で説明する（一文の意味全体。単語訳だけは禁止）
+- 誤答の why_wrong_burmese は「文全体としてなぜ不自然／不適切か」を書く
+- usage_burmese / why_wrong_burmese / explanation_burmese 内の日本語も必ず 漢字《ひらがな》形式
 
 # 設問レベルの meaning_burmese（ヘッダー Line 2・厳守）
 - 対象は target_word のみ。options_table の意味欄とは別
@@ -173,7 +192,6 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
 - 長くしすぎない。はっきり・短く・正確に。ただし文脈が分かる程度の情報は省かない
 
 # ビルマ語の書き方（簡潔・自然）
-- ビルマ語のみで書く（英語・中国語・ローマ字解説禁止）
 - 機械翻訳調・ぎこちない直訳を避ける
 - 日本語キーワードを残すときは必ず漢字と読みをペアで書く: 漢字《ひらがな》（例: 安心《あんしん》、非現実的《ひげんじつてき》）。読みなしの裸の漢字だけは禁止
 - 設問レベルの meaning_burmese（ヘッダー用）には日本語・《読み》・句点「။」付きの長文を入れない。options_table の意味欄はこの制限の対象外
@@ -182,7 +200,7 @@ const JLPT_N2_SYSTEM_PROMPT_CORE = `あなたはJLPT N2語彙を教える日本�
 - 有効なJSONのみ。Markdown・コードフェンス・前後の説明文禁止
 - ルート: { "questions": [ ... ] }
 - 設問キーのみ: mondai_type, question_number, japanese_sentence, furigana_tokens, target_word, reading, meaning_burmese, correct_option, options_table, explanation_burmese, nuance_note
-- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, why_wrong_burmese
+- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, sentence_burmese, why_wrong_burmese
 - furigana_tokens キーのみ: surface, reading
 - 並び: mondai_type → question_number 昇順`;
 

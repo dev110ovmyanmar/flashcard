@@ -72,26 +72,164 @@ export function applyReadingMap(
   text: string,
   readings: Record<string, string> | null | undefined,
 ): FuriganaSegment[] {
+  return applyAnnotationMap(text, readings, null).map(({ surface, reading }) =>
+    reading ? { surface, reading } : { surface },
+  );
+}
+
+export type AnnotatedSegment = {
+  surface: string;
+  reading?: string;
+  meaning?: string;
+  highlight?: boolean;
+};
+
+const KANJI_RUN_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff々〆ヵヶ]+/g;
+
+/** Expand a target headword into matchable surfaces (strip markup, kanji runs). */
+export function expandHighlightTargets(
+  value: string | readonly string[] | null | undefined,
+): string[] {
+  if (!value) return [];
+  const list = typeof value === "string" ? [value] : [...value];
+  const out = new Set<string>();
+
+  for (const raw of list) {
+    const cleaned = raw.replace(/《[^》]*》/g, "").replace(/（[^）]*）/g, "").replace(/\([^)]*\)/g, "").trim();
+    if (!cleaned) continue;
+    out.add(cleaned);
+
+    const runs = cleaned.match(KANJI_RUN_RE) ?? [];
+    for (const run of runs) {
+      if (run) out.add(run);
+    }
+
+    // Drop trailing kana okurigana: 読む → 読
+    const withoutOkurigana = cleaned.replace(/[ぁ-んァ-ヶー]+$/u, "");
+    if (withoutOkurigana && withoutOkurigana !== cleaned && hasKanji(withoutOkurigana)) {
+      out.add(withoutOkurigana);
+    }
+  }
+
+  return [...out].sort((a, b) => b.length - a.length);
+}
+
+/**
+ * Split segments on highlight surfaces, then mark exact / consecutive matches.
+ * Handles tokenized stems where 計画 is split as 計 + 画.
+ */
+export function applyHighlightsToSegments(
+  segments: AnnotatedSegment[],
+  highlights: string[],
+): AnnotatedSegment[] {
+  if (highlights.length === 0 || segments.length === 0) return segments;
+
+  const highlightSet = new Set(highlights);
+  const splitKeys: Record<string, string> = {};
+  for (const surface of highlights) splitKeys[surface] = "1";
+
+  const expanded: AnnotatedSegment[] = [];
+  for (const segment of segments) {
+    if (highlightSet.has(segment.surface)) {
+      expanded.push({ ...segment, highlight: true });
+      continue;
+    }
+
+    const parts = applyAnnotationMap(segment.surface, null, splitKeys);
+    if (parts.length === 1 && parts[0]?.surface === segment.surface) {
+      expanded.push({ ...segment, highlight: false });
+      continue;
+    }
+
+    for (const part of parts) {
+      expanded.push({
+        surface: part.surface,
+        reading: part.surface === segment.surface ? segment.reading : undefined,
+        meaning: part.surface === segment.surface ? segment.meaning : undefined,
+        highlight: highlightSet.has(part.surface),
+      });
+    }
+  }
+
+  // Mark consecutive surfaces that join to a highlight (e.g. 計 + 画 → 計画).
+  const marked = expanded.map((segment) => ({ ...segment, highlight: Boolean(segment.highlight) }));
+  let i = 0;
+  while (i < marked.length) {
+    if (marked[i]?.highlight) {
+      i += 1;
+      continue;
+    }
+
+    let matched = false;
+    for (const target of highlights) {
+      let acc = "";
+      let j = i;
+      while (j < marked.length && acc.length < target.length) {
+        const next = marked[j];
+        if (!next || next.highlight) break;
+        acc += next.surface;
+        j += 1;
+        if (acc === target) {
+          for (let k = i; k < j; k += 1) marked[k]!.highlight = true;
+          i = j;
+          matched = true;
+          break;
+        }
+        if (!target.startsWith(acc)) break;
+      }
+      if (matched) break;
+    }
+    if (!matched) i += 1;
+  }
+
+  return marked;
+}
+
+/**
+ * Longest-first split using reading and/or meaning headwords.
+ * Surfaces present only in `meanings` still become hover targets.
+ */
+export function applyAnnotationMap(
+  text: string,
+  readings: Record<string, string> | null | undefined,
+  meanings: Record<string, string> | null | undefined,
+): AnnotatedSegment[] {
   const trimmed = text;
   if (!trimmed) return [];
-  if (!readings) return [{ surface: trimmed }];
 
-  const entries = Object.entries(readings)
-    .map(([surface, reading]) => [surface.trim(), reading.trim()] as const)
-    .filter(([surface, reading]) => surface.length > 0 && reading.length > 0)
-    .sort((a, b) => b[0].length - a[0].length);
+  const readingMap = readings ?? {};
+  const meaningMap = meanings ?? {};
+  const surfaces = new Set([
+    ...Object.keys(readingMap).map((key) => key.trim()).filter(Boolean),
+    ...Object.keys(meaningMap).map((key) => key.trim()).filter(Boolean),
+  ]);
+
+  if (surfaces.size === 0) return [{ surface: trimmed }];
+
+  const entries = [...surfaces]
+    .map((surface) => {
+      const reading = readingMap[surface]?.trim() ?? "";
+      const meaning = meaningMap[surface]?.trim() ?? "";
+      return { surface, reading, meaning };
+    })
+    .filter((entry) => entry.reading || entry.meaning)
+    .sort((a, b) => b.surface.length - a.surface.length);
 
   if (entries.length === 0) return [{ surface: trimmed }];
 
-  const segments: FuriganaSegment[] = [];
+  const segments: AnnotatedSegment[] = [];
   let i = 0;
 
   while (i < trimmed.length) {
     let matched = false;
-    for (const [surface, reading] of entries) {
-      if (trimmed.startsWith(surface, i)) {
-        segments.push({ surface, reading });
-        i += surface.length;
+    for (const entry of entries) {
+      if (trimmed.startsWith(entry.surface, i)) {
+        segments.push({
+          surface: entry.surface,
+          reading: entry.reading || undefined,
+          meaning: entry.meaning || undefined,
+        });
+        i += entry.surface.length;
         matched = true;
         break;
       }
@@ -101,7 +239,7 @@ export function applyReadingMap(
     const start = i;
     i += 1;
     while (i < trimmed.length) {
-      const hit = entries.some(([surface]) => trimmed.startsWith(surface, i));
+      const hit = entries.some((entry) => trimmed.startsWith(entry.surface, i));
       if (hit) break;
       i += 1;
     }

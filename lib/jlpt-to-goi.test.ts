@@ -31,6 +31,7 @@ const SAMPLE: JlptQuestion = {
       reading: "せいこう",
       meaning_burmese: "အောင်မြင်ခြင်း",
       usage_burmese: "အစီအစဉ် အောင်မြင်သည်ဟု ပြောသည့်အခါ",
+      sentence_burmese: "",
       why_wrong_burmese: "ဆန့်ကျင်ဘက်ဖြစ်သည်",
     },
     {
@@ -39,6 +40,7 @@ const SAMPLE: JlptQuestion = {
       reading: "かんせい",
       meaning_burmese: "ပြီးဆုံးခြင်း",
       usage_burmese: "အလုပ် ပြီးသည်ဟု ပြောသည့်အခါ",
+      sentence_burmese: "",
       why_wrong_burmese: "မအောင်မြင်ခြင်းကို မဆိုလို",
     },
     {
@@ -47,6 +49,7 @@ const SAMPLE: JlptQuestion = {
       reading: "しっぱい",
       meaning_burmese: "မအောင်မြင်ခြင်း",
       usage_burmese: "အစီအစဉ် မအောင်မြင်ဟု ပြောသည့်အခါ",
+      sentence_burmese: "",
       why_wrong_burmese: "",
     },
     {
@@ -55,6 +58,7 @@ const SAMPLE: JlptQuestion = {
       reading: "けいぞく",
       meaning_burmese: "ဆက်လက်လုပ်ခြင်း",
       usage_burmese: "ဆက်လုပ်သည်ဟု ပြောသည့်အခါ",
+      sentence_burmese: "",
       why_wrong_burmese: "အဆုံးသတ်ခြင်းနှင့် မကိုက်",
     },
   ],
@@ -136,6 +140,7 @@ test("drops garbled or incomplete options when saving", () => {
           reading: "あんしん",
           meaning_burmese: "စိတ်ချရခြင်း၊ ငြိမ်းချမ်းခြင်း၊ သက်သာခြင်း။",
           usage_burmese: "long note",
+          sentence_burmese: "",
           why_wrong_burmese: "",
         },
         {
@@ -144,6 +149,7 @@ test("drops garbled or incomplete options when saving", () => {
           reading: "あ",
           meaning_burmese: "အလွတ်",
           usage_burmese: "",
+          sentence_burmese: "",
           why_wrong_burmese: "",
         },
         {
@@ -152,6 +158,7 @@ test("drops garbled or incomplete options when saving", () => {
           reading: "shippai",
           meaning_burmese: "မအောင်မြင်ခြင်း",
           usage_burmese: "",
+          sentence_burmese: "",
           why_wrong_burmese: "",
         },
         {
@@ -160,6 +167,7 @@ test("drops garbled or incomplete options when saving", () => {
           reading: "せいこう",
           meaning_burmese: "",
           usage_burmese: "အစီအစဉ် အောင်မြင်သည်",
+          sentence_burmese: "",
           why_wrong_burmese: "",
         },
       ],

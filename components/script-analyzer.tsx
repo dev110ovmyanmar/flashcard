@@ -13,6 +13,7 @@ import { ScriptVocabCard } from "@/components/script-vocab-card";
 import { useDecks } from "@/hooks/use-decks";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestScriptAnalyze, requestScriptAnalyzeImage } from "@/lib/client-script";
+import { UI } from "@/src/constants/uiCopy";
 import { createDeck } from "@/lib/decks";
 import { datedDeckName } from "@/lib/format";
 import { fileToJpegBase64ForJlpt } from "@/lib/prepare-image";
@@ -23,7 +24,7 @@ import type { VocabRow } from "@/lib/types";
 type ResultTab = "vocabulary" | "grammar";
 type PreparedScriptImage = { base64: string; previewUrl: string };
 
-const PAGE_TITLE = "Script";
+const PAGE_TITLE = UI.page.script;
 const MAX_SCRIPT_CHARS = 28_000;
 
 const btnSaveIcon =
@@ -140,7 +141,7 @@ export function ScriptAnalyzer() {
       setVocabulary(result.vocabulary);
       setGrammar(result.grammar);
       setTab(result.vocabulary.length > 0 || result.grammar.length === 0 ? "vocabulary" : "grammar");
-      if (result.source === "cache") toast.message("Loaded from cache");
+      if (result.source === "cache") toast.message(UI.results.cacheLoaded);
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
       setVocabulary([]);
@@ -233,10 +234,10 @@ export function ScriptAnalyzer() {
           prepared={prepared}
           textInput={scriptText}
           maxTextChars={MAX_SCRIPT_CHARS}
-          imageHint="PNG, JPG, or WebP · Listening script"
-          imageAlt="Selected script page"
-          textTitle="Paste or type script text"
-          textHint="Listening script dialogue / narration"
+          imageHint={UI.hints.scriptImage}
+          imageAlt={UI.hints.scriptImageAlt}
+          textTitle={UI.hints.scriptTextTitle}
+          textHint={UI.hints.scriptTextHint}
           textPlaceholder={"男：すみません、駅までの行き方を教えていただけますか。\n女：はい。この道をまっすぐ行って、二つ目の信号を右に曲がってください。"}
           textareaId="script-analyzer-input"
           onTextChange={(value) => {
@@ -295,7 +296,7 @@ export function ScriptAnalyzer() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Results
+                  {UI.results.results}
                 </p>
                 <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground">
                   {resultLabel}
@@ -327,7 +328,7 @@ export function ScriptAnalyzer() {
 
             <div
               role="tablist"
-              aria-label="Script analysis results"
+              aria-label={UI.hints.scriptLoading}
               className="flex flex-wrap gap-1 rounded-xl border border-border/60 bg-muted/25 p-1 dark:bg-muted/15"
             >
               <button

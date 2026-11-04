@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { harvestMarkupReadings } from "@/lib/furigana";
 import type { ScriptVocabItem } from "@/src/constants/scriptPrompt";
+import { UI } from "@/src/constants/uiCopy";
 
 const btnAction =
   [
@@ -112,7 +113,7 @@ export function ScriptVocabCard({
           <div className="flex flex-1 flex-col gap-4 p-4 sm:px-5 sm:py-4">
             {item.meaning_burmese ? (
               <section className="min-w-0">
-                <SectionLabel>Meaning</SectionLabel>
+                <SectionLabel>{UI.card.meaning}</SectionLabel>
                 <p
                   lang="my"
                   className="mt-2 font-myanmar text-[14px] leading-[1.95] break-words text-foreground/90"
@@ -129,7 +130,7 @@ export function ScriptVocabCard({
                   item.meaning_burmese ? "border-t border-border/40 pt-4 dark:border-white/[0.06]" : "",
                 ].join(" ")}
               >
-                <SectionLabel>In the script</SectionLabel>
+                <SectionLabel>{UI.card.inScript}</SectionLabel>
                 <FuriganaHover
                   text={item.example_sentence}
                   readings={readings}

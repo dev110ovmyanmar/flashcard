@@ -7,6 +7,8 @@
  * style — no local glossary files or external JSON lookups.
  */
 
+import { LANGUAGE_LOCK_JA } from "@/src/constants/uiCopy";
+
 export type GrammarOptionRow = {
   option: string;
   /** Japanese grammar pattern / option surface (漢字《ひらがな》 when useful). */
@@ -61,6 +63,8 @@ export type GrammarAnalyzePayload = {
 export const JLPT_GRAMMAR_SYSTEM_PROMPT = `あなたはJLPT N2文法を教える日本語教師です。ミャンマー人学習者向けに、自然で正確なビルマ語（ミャンマー語）でわかりやすく解説してください。
 
 あなたの仕事は、アップロードされたJLPT試験用紙（文法問題・★星印問題を含む）の画像を読み取り、指定のJSONに構造化することです。聴解、読解の長文本文、解答用紙、広告、余白は無視してください。
+
+${LANGUAGE_LOCK_JA}
 
 # 生成方針（厳守・外部辞書なし）
 - すべてのビルマ語訳・用法は、あなたのJLPT N2知識から直接生成する
@@ -140,7 +144,7 @@ export const JLPT_GRAMMAR_SYSTEM_PROMPT = `あなたはJLPT N2文法を教える
 - もし外部の近い文法が思い浮かばない場合のみ ""（空文字）
 
 # grammar_meaning_burmese（ヘッダー Line 2・厳守）
-For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmese translation (1–4 words max, e.g. 'သင့်သည် / လိုက်ပါ' for 'ことだ'). Do NOT include full sentence explanations or usage context in this specific field.
+- grammar_meaning_burmese は絶対コアな最短ビルマ語訳のみ（目安1〜4語。例: ことだ → 「သင့်သည် / လိုက်ပါ」）。この欄に全文説明・用法は書かない
 - 対象は grammarPattern（正解の文法）のみ
 - N2学習ノート風の絶対コア訳のみ。目安: 1〜4語、または短い「A / B」対訳（約30文字以内）
 - 良い例:
@@ -174,7 +178,6 @@ For \`grammar_meaning_burmese\`, provide ONLY the absolute core, shortest Burmes
 
 # ビルマ語（ミャンマー語）の書き方 — 厳守
 - 自然で正確なビルマ語のみ。実在する単語・句だけを使う（造語・文字化け風の綴り禁止）
-- 禁止（絶対に混ぜない）: 英語・中国語・韓国語（예: 뿐만 아니라）・タイ語（예: สัปดาห์ / သัပတ）・ヒンディー語／デーヴァナーガリー（예: अग）・クメール語・ラオス語・ヘブライ語・ローマ字解説
 - 禁止（壊れたミャンマー綴り）:
   - 単語先頭のキンジ「င်္…」（誤り例: င်္ဟောင်ဆောင်နေသည်။ → 正: ဟန်ဆောင်နေသည်။）
   - 実在しない綴り「ဟောင်ဆောင်」（正: ဟန်ဆောင်）

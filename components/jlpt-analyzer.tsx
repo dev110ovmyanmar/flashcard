@@ -1,6 +1,6 @@
 "use client";
 
-import { BookmarkPlus, Library, Loader2 } from "lucide-react";
+import { BookmarkPlus, Library, Loader2, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
@@ -9,6 +9,7 @@ import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { AnalyzerPageHeader } from "@/components/analyzer-page-header";
 import { GoiDrawer } from "@/components/goi-drawer";
 import { JlptQuestionCard } from "@/components/jlpt-question-card";
+import { Button } from "@/components/ui/button";
 import { useDecks } from "@/hooks/use-decks";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestJlptAnalyze, requestJlptAnalyzeText } from "@/lib/client-jlpt";
@@ -17,10 +18,11 @@ import { datedDeckName } from "@/lib/format";
 import { jlptQuestionsToVocabRows } from "@/lib/jlpt-to-goi";
 import { fileToJpegBase64ForJlpt } from "@/lib/prepare-image";
 import type { JlptQuestion } from "@/src/constants/jlptPrompt";
+import { UI } from "@/src/constants/uiCopy";
 
 type PreparedJlptImage = { base64: string; previewUrl: string };
 
-const PAGE_TITLE = "Vocabulary";
+const PAGE_TITLE = UI.page.vocab;
 const MAX_TEXT_CHARS = 28_000;
 
 const btnSaveIcon =
@@ -106,6 +108,10 @@ export function JlptAnalyzer() {
     setDragging(false);
   }
 
+  function startNewAnalysis() {
+    clearSelection();
+  }
+
   async function analyze() {
     const trimmed = textInput.trim();
     const usingText = inputMode === "text";
@@ -124,7 +130,7 @@ export function JlptAnalyzer() {
         : await requestJlptAnalyze(prepared!.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setQuestions(result.questions);
-      if (result.source === "cache") toast.message("Loaded from cache");
+      if (result.source === "cache") toast.message(UI.results.cacheLoaded);
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
       setQuestions([]);
@@ -158,6 +164,7 @@ export function JlptAnalyzer() {
   }
 
   const hasResults = questions.length > 0;
+  const showInput = !hasResults;
   const canAnalyze = inputMode === "text" ? textInput.trim().length > 0 : Boolean(prepared);
 
   return (
@@ -167,43 +174,45 @@ export function JlptAnalyzer() {
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-6 sm:space-y-5 sm:px-6 sm:pt-7 sm:pb-8">
         <GeminiKeyNotice />
 
-        <AnalyzerInputPanel
-          mode={inputMode}
-          onModeChange={switchMode}
-          analyzing={analyzing}
-          canAnalyze={canAnalyze}
-          geminiReady={geminiReady === true}
-          dragging={dragging}
-          prepared={prepared}
-          textInput={textInput}
-          maxTextChars={MAX_TEXT_CHARS}
-          imageHint="PNG, JPG, or WebP · Mondai 1–6"
-          imageAlt="Selected exam page"
-          textTitle="Paste or type vocabulary text"
-          textHint=""
-          textPlaceholder={"問題4\n1 彼の話はあまりにも_____ので、誰も信じなかった。\n1 現実的　2 非現実的　3 積極的　4 消極的"}
-          textareaId="jlpt-text-input"
-          onTextChange={(value) => {
-            setTextInput(value);
-            setPrepared(null);
-            setError(null);
-            setQuestions([]);
-          }}
-          onPickFile={() => fileRef.current?.click()}
-          onPickCamera={() => cameraRef.current?.click()}
-          onClear={clearSelection}
-          onAnalyze={() => void analyze()}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            void takeFile(event.dataTransfer.files?.[0] ?? null);
-          }}
-        />
+        {showInput ? (
+          <AnalyzerInputPanel
+            mode={inputMode}
+            onModeChange={switchMode}
+            analyzing={analyzing}
+            canAnalyze={canAnalyze}
+            geminiReady={geminiReady === true}
+            dragging={dragging}
+            prepared={prepared}
+            textInput={textInput}
+            maxTextChars={MAX_TEXT_CHARS}
+            imageHint={UI.hints.vocabImage}
+            imageAlt={UI.hints.vocabImageAlt}
+            textTitle={UI.hints.vocabTextTitle}
+            textHint={UI.hints.vocabTextHint}
+            textPlaceholder={"問題4\n1 彼の話はあまりにも_____ので、誰も信じなかった。\n1 現実的　2 非現実的　3 積極的　4 消極的"}
+            textareaId="jlpt-text-input"
+            onTextChange={(value) => {
+              setTextInput(value);
+              setPrepared(null);
+              setError(null);
+              setQuestions([]);
+            }}
+            onPickFile={() => fileRef.current?.click()}
+            onPickCamera={() => cameraRef.current?.click()}
+            onClear={clearSelection}
+            onAnalyze={() => void analyze()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              void takeFile(event.dataTransfer.files?.[0] ?? null);
+            }}
+          />
+        ) : null}
 
         {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 
@@ -230,7 +239,7 @@ export function JlptAnalyzer() {
         />
 
         {analyzing && !hasResults ? (
-          <AnalysisSkeleton label="Reading the vocabulary page…" cards={3} />
+          <AnalysisSkeleton label={UI.hints.vocabLoading} cards={3} />
         ) : null}
 
         {hasResults ? (
@@ -238,13 +247,21 @@ export function JlptAnalyzer() {
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-                  Results
+                  {UI.results.results}
                 </p>
                 <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground">
-                  {questions.length} question{questions.length === 1 ? "" : "s"}
+                  {UI.results.questions(questions.length)}
                 </h2>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-lg px-2.5 text-xs font-medium"
+                  onClick={startNewAnalysis}
+                >
+                  <Plus className="size-3.5" aria-hidden />{UI.results.new}</Button>
                 <button
                   type="button"
                   className={btnViewGoi}

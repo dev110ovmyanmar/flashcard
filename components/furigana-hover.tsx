@@ -6,14 +6,19 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
 import {
+  applyAnnotationMap,
+  applyHighlightsToSegments,
+  expandHighlightTargets,
   hasKanji,
   resolveFuriganaSegments,
+  type AnnotatedSegment,
   type FuriganaSegment,
 } from "@/lib/furigana";
 
@@ -30,6 +35,10 @@ type FuriganaHoverProps = {
   tokens?: Array<{ surface: string; reading?: string | null }> | null;
   /** Headword → reading map applied longest-first. */
   readings?: Record<string, string> | null;
+  /** Headword → Burmese meaning map for hover glosses. */
+  meanings?: Record<string, string> | null;
+  /** Surface(s) to underline (e.g. Mondai 1 target kanji). */
+  highlight?: string | readonly string[] | null;
   className?: string;
   /** Wrapper language (use `my` for Burmese prose with embedded Japanese). */
   lang?: string;
@@ -39,8 +48,14 @@ type FuriganaHoverProps = {
   focusable?: boolean;
 };
 
+type RenderSegment = AnnotatedSegment & { highlight?: boolean };
+
+const HIGHLIGHT_CLASS =
+  "underline decoration-[1.5px] decoration-foreground/80 underline-offset-[0.2em] [text-decoration-skip-ink:none]";
+
 type TooltipState = {
   reading: string;
+  meaning: string;
   top: number;
   left: number;
 };
@@ -61,16 +76,29 @@ function FuriganaTooltip({ state, labelledBy }: { state: TooltipState | null; la
     <span
       role="tooltip"
       id={labelledBy}
-      lang="ja"
       style={style}
       className={cn(
-        "pointer-events-none z-[200] max-w-[min(12rem,70vw)] rounded-md border border-border/70",
-        "bg-popover/95 px-2 py-1 font-sans text-xs leading-none tracking-[0.04em] text-popover-foreground shadow-md",
-        "backdrop-blur-sm transition-opacity duration-150",
-        "dark:border-white/12 dark:bg-popover/90",
+        "pointer-events-none z-[200] max-w-[min(16rem,78vw)] rounded-lg border border-border/70",
+        "bg-popover/95 px-2.5 py-1.5 shadow-md backdrop-blur-sm",
+        "transition-opacity duration-150 dark:border-white/12 dark:bg-popover/90",
       )}
     >
-      {state.reading}
+      {state.reading ? (
+        <span lang="ja" className="block font-sans text-[11px] leading-none tracking-[0.04em] text-muted-foreground">
+          {state.reading}
+        </span>
+      ) : null}
+      {state.meaning ? (
+        <span
+          lang="my"
+          className={cn(
+            "block font-myanmar text-[12px] leading-5 text-popover-foreground",
+            state.reading ? "mt-1" : "",
+          )}
+        >
+          {state.meaning}
+        </span>
+      ) : null}
     </span>,
     document.body,
   );
@@ -79,15 +107,19 @@ function FuriganaTooltip({ state, labelledBy }: { state: TooltipState | null; la
 /** Brief pause before pairing furigana above the kanji (feels intentional, avoids flicker). */
 const HOVER_PAIR_DELAY_MS = 450;
 
-function HoverableKanji({
+function HoverableWord({
   surface,
   reading,
+  meaning,
+  highlight,
   alwaysShow,
   focusable,
   className,
 }: {
   surface: string;
   reading: string;
+  meaning: string;
+  highlight: boolean;
   alwaysShow: boolean;
   focusable: boolean;
   className?: string;
@@ -110,10 +142,11 @@ function HoverableKanji({
     const rect = node.getBoundingClientRect();
     setTooltip({
       reading,
+      meaning,
       top: rect.top,
       left: rect.left + rect.width / 2,
     });
-  }, [reading]);
+  }, [reading, meaning]);
 
   const showSoon = useCallback(
     (immediate = false) => {
@@ -153,11 +186,16 @@ function HoverableKanji({
     };
   }, [tooltip, updatePosition, hide]);
 
-  if (alwaysShow) {
+  if (alwaysShow && reading) {
     return (
       <ruby
         lang="ja"
-        className={cn("furigana-ruby furigana-ruby-open inline align-baseline", className)}
+        className={cn(
+          "furigana-ruby furigana-ruby-open inline align-baseline",
+          highlight ? HIGHLIGHT_CLASS : "",
+          className,
+        )}
+        title={meaning || undefined}
       >
         {surface}
         <rp>(</rp>
@@ -188,10 +226,13 @@ function HoverableKanji({
         }}
         className={cn(
           "furigana-hover-target relative inline cursor-help rounded-[2px] align-baseline transition-colors duration-150",
-          "decoration-dotted underline-offset-[0.22em]",
           "hover:bg-primary/[0.06] focus-visible:bg-primary/[0.08] focus-visible:outline-none",
           "dark:hover:bg-primary/10",
-          open && "bg-primary/[0.08] underline decoration-primary/40",
+          highlight
+            ? HIGHLIGHT_CLASS
+            : "decoration-dotted underline-offset-[0.22em]",
+          open && !highlight && "bg-primary/[0.08] underline decoration-primary/40",
+          open && highlight && "bg-primary/[0.06]",
           className,
         )}
       >
@@ -202,20 +243,52 @@ function HoverableKanji({
   );
 }
 
-function renderSegments(
+function attachMeanings(
   segments: FuriganaSegment[],
+  meanings: Record<string, string> | null | undefined,
+): AnnotatedSegment[] {
+  if (!meanings || Object.keys(meanings).length === 0) {
+    return segments.map((segment) => ({
+      surface: segment.surface,
+      reading: segment.reading,
+    }));
+  }
+
+  const out: AnnotatedSegment[] = [];
+  for (const segment of segments) {
+    const direct = meanings[segment.surface]?.trim() ?? "";
+    if (segment.reading || direct) {
+      out.push({
+        surface: segment.surface,
+        reading: segment.reading,
+        meaning: direct || undefined,
+      });
+      continue;
+    }
+    out.push(...applyAnnotationMap(segment.surface, null, meanings));
+  }
+  return out;
+}
+
+function renderSegments(
+  segments: RenderSegment[],
   options: { alwaysShow: boolean; focusable: boolean; className?: string; lang: string },
 ) {
   return segments.map((segment, index) => {
     const surface = segment.surface;
     if (!surface) return null;
     const reading = segment.reading?.trim() ?? "";
-    if (reading && hasKanji(surface)) {
+    const meaning = segment.meaning?.trim() ?? "";
+    const highlight = Boolean(segment.highlight);
+    const canHover = Boolean(meaning) || Boolean(reading && hasKanji(surface));
+    if (canHover) {
       return (
-        <HoverableKanji
-          key={`fk-${index}-${surface}-${reading}`}
+        <HoverableWord
+          key={`fk-${index}-${surface}-${reading}-${meaning}`}
           surface={surface}
           reading={reading}
+          meaning={meaning}
+          highlight={highlight}
           alwaysShow={options.alwaysShow}
           focusable={options.focusable}
           className={options.className}
@@ -226,7 +299,11 @@ function renderSegments(
       <span
         key={`fp-${index}-${surface}`}
         lang={options.lang}
-        className={cn("inline whitespace-pre-wrap align-baseline", options.className)}
+        className={cn(
+          "inline whitespace-pre-wrap align-baseline",
+          highlight ? HIGHLIGHT_CLASS : "",
+          options.className,
+        )}
       >
         {surface}
       </span>
@@ -237,18 +314,26 @@ function renderSegments(
 /**
  * Reusable wrapper: renders Japanese text and shows furigana on hover
  * for any kanji span that has a reading (tokens, map, markup, or `reading`).
+ * Optional `meanings` adds Burmese glosses on the same hover tip.
  */
 export function FuriganaHover({
   text,
   reading,
   tokens,
   readings,
+  meanings,
+  highlight,
   className,
   lang = "ja",
   alwaysShow = false,
   focusable = true,
 }: FuriganaHoverProps) {
-  const segments = resolveFuriganaSegments({ text, reading, tokens, readings });
+  const highlights = useMemo(() => expandHighlightTargets(highlight), [highlight]);
+  const segments = useMemo(() => {
+    const base = resolveFuriganaSegments({ text, reading, tokens, readings });
+    const withMeanings = attachMeanings(base, meanings);
+    return applyHighlightsToSegments(withMeanings, highlights);
+  }, [text, reading, tokens, readings, meanings, highlights]);
   const isSentence = segments.length > 1 || /[。．！？\n]|_____/.test(text);
 
   return (

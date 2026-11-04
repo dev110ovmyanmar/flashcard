@@ -7,6 +7,7 @@ import {
   type JlptOptionRow,
   type JlptQuestion,
 } from "@/src/constants/jlptPrompt";
+import { stripForeignGlosses } from "@/lib/clean-burmese";
 import { primaryMeaning } from "@/lib/jlpt-to-goi";
 
 /** Primary model for JLPT vision analysis — Flash-Lite for lowest latency. */
@@ -77,6 +78,11 @@ const JLPT_RESPONSE_SCHEMA = {
                     "Natural Burmese meaning of this option for the 意味 table. May include multiple senses. Not the short header gloss.",
                 },
                 usage_burmese: { type: "STRING" },
+                sentence_burmese: {
+                  type: "STRING",
+                  description:
+                    "Full Burmese translation/explanation of japanese when it is a complete sentence (required for Mondai 6 usage examples). Empty otherwise.",
+                },
                 why_wrong_burmese: { type: "STRING" },
               },
               required: [
@@ -85,6 +91,7 @@ const JLPT_RESPONSE_SCHEMA = {
                 "reading",
                 "meaning_burmese",
                 "usage_burmese",
+                "sentence_burmese",
                 "why_wrong_burmese",
               ],
             },
@@ -854,10 +861,12 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
   const target_word = asString(value.target_word ?? value.targetWord ?? value.target);
   const reading = asString(value.reading ?? value.furigana ?? value.yomi);
   const correct_option = asString(value.correct_option ?? value.correctOption ?? value.answer);
-  const explanation_burmese = asString(
-    value.explanation_burmese ?? value.explanationBurmese ?? value.explanation,
+  const explanation_burmese = stripForeignGlosses(
+    asString(value.explanation_burmese ?? value.explanationBurmese ?? value.explanation),
   );
-  const nuance_note = asString(value.nuance_note ?? value.nuanceNote ?? value.nuance);
+  const nuance_note = stripForeignGlosses(
+    asString(value.nuance_note ?? value.nuanceNote ?? value.nuance),
+  );
 
   if (!japanese_sentence && !target_word && options_table.length === 0) return null;
 
@@ -881,11 +890,13 @@ function tidyQuestion(value: unknown): JlptQuestion | null {
   );
   const meaning_burmese =
     primaryMeaning(
-      asString(
-        value.meaning_burmese ??
-          value.meaningBurmese ??
-          value.target_word_meaning ??
-          value.targetWordMeaning,
+      stripForeignGlosses(
+        asString(
+          value.meaning_burmese ??
+            value.meaningBurmese ??
+            value.target_word_meaning ??
+            value.targetWordMeaning,
+        ),
       ),
     ) || primaryMeaning(correctRow?.meaning_burmese);
 
@@ -947,19 +958,30 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
     const japanese = asString(item.japanese ?? item.text ?? item.word ?? item.kanji);
     const reading = asString(item.reading ?? item.furigana ?? item.yomi);
     // Keep option meanings intact for the 意味 table — do not shorten here.
-    const meaning_burmese = asString(
-      item.meaning_burmese ?? item.meaningBurmese ?? item.burmese ?? item.meaning ?? item.myanmar,
+    const meaning_burmese = stripForeignGlosses(
+      asString(item.meaning_burmese ?? item.meaningBurmese ?? item.burmese ?? item.meaning ?? item.myanmar),
     );
-    const usage_burmese = asString(
-      item.usage_burmese ?? item.usageBurmese ?? item.usage ?? item.context ?? item.collocation,
+    const usage_burmese = stripForeignGlosses(
+      asString(item.usage_burmese ?? item.usageBurmese ?? item.usage ?? item.context ?? item.collocation),
     );
-    const why_wrong_burmese = asString(
-      item.why_wrong_burmese ??
-        item.whyWrongBurmese ??
-        item.why_wrong ??
-        item.whyWrong ??
-        item.distractor_reason ??
-        item.incorrect_reason,
+    const sentence_burmese = stripForeignGlosses(
+      asString(
+        item.sentence_burmese ??
+          item.sentenceBurmese ??
+          item.sentence_meaning_burmese ??
+          item.full_meaning_burmese ??
+          item.translation_burmese,
+      ),
+    );
+    const why_wrong_burmese = stripForeignGlosses(
+      asString(
+        item.why_wrong_burmese ??
+          item.whyWrongBurmese ??
+          item.why_wrong ??
+          item.whyWrong ??
+          item.distractor_reason ??
+          item.incorrect_reason,
+      ),
     );
     if (!option && !japanese && !meaning_burmese) continue;
     rows.push({
@@ -968,6 +990,7 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
       reading,
       meaning_burmese,
       usage_burmese,
+      sentence_burmese,
       why_wrong_burmese,
     });
   }

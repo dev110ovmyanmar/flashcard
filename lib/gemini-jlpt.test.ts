@@ -38,6 +38,7 @@ const SAMPLE = {
           reading: "せいこう",
           meaning_burmese: "အောင်မြင်ခြင်း",
           usage_burmese: "အောင်မြင်သည်ဟု သုံး",
+          sentence_burmese: "",
           why_wrong_burmese: "ဆန့်ကျင်ဘက်",
         },
         {
@@ -46,6 +47,7 @@ const SAMPLE = {
           reading: "かんせい",
           meaning_burmese: "ပြီးဆုံးခြင်း",
           usage_burmese: "ပြီးသည်ဟု သုံး",
+          sentence_burmese: "",
           why_wrong_burmese: "မကိုက်ညီ",
         },
         {
@@ -54,6 +56,7 @@ const SAMPLE = {
           reading: "しっぱい",
           meaning_burmese: "မအောင်မြင်ခြင်း",
           usage_burmese: "မအောင်မြင်ဟု သုံး",
+          sentence_burmese: "",
           why_wrong_burmese: "",
         },
         {
@@ -62,6 +65,7 @@ const SAMPLE = {
           reading: "けいぞく",
           meaning_burmese: "ဆက်လက်လုပ်ခြင်း",
           usage_burmese: "ဆက်လုပ်သည်ဟု သုံး",
+          sentence_burmese: "",
           why_wrong_burmese: "မကိုက်ညီ",
         },
       ],
@@ -224,6 +228,7 @@ test("Mondai 6 collapses dumped usage sentences to the headword and keeps short 
               reading: "",
               meaning_burmese: "ကြေညာစာကပ်ခြင်း",
               usage_burmese: "",
+              sentence_burmese: "",
               why_wrong_burmese: "စာတမ်းကို တင်သည်ဟု မသုံး",
             },
             {
@@ -232,6 +237,7 @@ test("Mondai 6 collapses dumped usage sentences to the headword and keeps short 
               reading: "",
               meaning_burmese: "ကြေညာစာကပ်ခြင်း",
               usage_burmese: "",
+              sentence_burmese: "",
               why_wrong_burmese: "ကြော်ငြာကို ပြသည်ဟု မသုံး",
             },
             {
@@ -240,6 +246,7 @@ test("Mondai 6 collapses dumped usage sentences to the headword and keeps short 
               reading: "",
               meaning_burmese: "ကြေညာစာကပ်ခြင်း",
               usage_burmese: "",
+              sentence_burmese: "",
               why_wrong_burmese: "ဓာတ်ပုံကို ကတ်ပေါ် တင်သည်ဟု မသုံး",
             },
             {
@@ -248,6 +255,7 @@ test("Mondai 6 collapses dumped usage sentences to the headword and keeps short 
               reading: "",
               meaning_burmese: "ကြေညာစာကပ်ခြင်း",
               usage_burmese: "အကြောင်းကြားစာ ကပ်ထားသည်",
+              sentence_burmese: "",
               why_wrong_burmese: "",
             },
           ],
@@ -276,6 +284,7 @@ test("parser guard shortens question meaning_burmese only; 意味 table options 
               reading: "せいこう",
               meaning_burmese: "အောင်မြင်ခြင်း၊ အောင်မြင်မှု။",
               usage_burmese: "အောင်မြင်သည်ဟု သုံး",
+              sentence_burmese: "",
               why_wrong_burmese: "ဆန့်ကျင်ဘက်",
             },
             {
@@ -284,6 +293,7 @@ test("parser guard shortens question meaning_burmese only; 意味 table options 
               reading: "かんせい",
               meaning_burmese: "ပြီးဆုံးခြင်း၊ ပြီးမြောက်ခြင်း။",
               usage_burmese: "ပြီးသည်ဟု သုံး",
+              sentence_burmese: "",
               why_wrong_burmese: "မကိုက်ညီ",
             },
             {
@@ -292,6 +302,7 @@ test("parser guard shortens question meaning_burmese only; 意味 table options 
               reading: "しっぱい",
               meaning_burmese: "မအောင်မြင်ခြင်း၊ ရှုံးနိမ့်ခြင်း။",
               usage_burmese: "မအောင်မြင်ဟု သုံး",
+              sentence_burmese: "",
               why_wrong_burmese: "",
             },
             SAMPLE.questions[0].options_table[3],

@@ -1,12 +1,24 @@
 "use client";
 
-import { Check, ChevronDown, X } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { Check, ChevronDown, Info, X } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { FuriganaHover } from "@/components/furigana-hover";
 import { Badge } from "@/components/ui/badge";
 import { harvestMarkupReadings } from "@/lib/furigana";
 import { primaryMeaning } from "@/lib/jlpt-to-goi";
 import type { JlptOptionRow, JlptQuestion } from "@/src/constants/jlptPrompt";
+import { UI } from "@/src/constants/uiCopy";
 
 function isCorrectOption(option: string, correct: string): boolean {
   return option.trim() !== "" && option.trim() === correct.trim();
@@ -42,6 +54,15 @@ function shouldHideStem(question: JlptQuestion): boolean {
   return false;
 }
 
+/** True when option japanese is a usage sentence (Mondai 6), not a headword. */
+export function isOptionSentence(japanese: string, mondaiType?: number): boolean {
+  if (mondaiType === 6) return true;
+  const text = japanese.trim();
+  if (!text) return false;
+  if (/[。．？！?!]/.test(text)) return true;
+  return Array.from(text.replace(/\s/g, "")).length >= 18;
+}
+
 /** Collect every known headword → reading from the analyzed question + prose markup. */
 export function buildQuestionReadings(question: JlptQuestion): Record<string, string> {
   const map: Record<string, string> = {};
@@ -59,10 +80,15 @@ export function buildQuestionReadings(question: JlptQuestion): Record<string, st
   for (const row of question.options_table) {
     const surface = row.japanese.trim();
     const reading = row.reading.trim();
-    if (surface && reading) map[surface] = reading;
+    // Never map a full 用例 sentence → one reading (breaks per-kanji hover).
+    if (surface && reading && !isOptionSentence(surface, question.mondai_type)) {
+      map[surface] = reading;
+    }
 
+    harvestMarkupReadings(row.japanese, map);
     harvestMarkupReadings(row.meaning_burmese, map);
     harvestMarkupReadings(row.usage_burmese, map);
+    harvestMarkupReadings(row.sentence_burmese ?? "", map);
     harvestMarkupReadings(row.why_wrong_burmese, map);
   }
 
@@ -87,8 +113,173 @@ function CorrectBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300/70 bg-emerald-100/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-800 whitespace-nowrap dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200">
       <Check className="size-2.5 text-emerald-600 dark:text-emerald-300" aria-hidden />
-      正解
+      {UI.card.correct}
     </span>
+  );
+}
+
+function clampTipLeft(anchorCenterX: number, tipMaxWidthRem = 22) {
+  const tipWidth = Math.min(tipMaxWidthRem * 16, window.innerWidth - 24);
+  const half = tipWidth / 2;
+  return Math.min(window.innerWidth - half - 12, Math.max(half + 12, anchorCenterX));
+}
+
+/** Mondai 6: tip for the full-sentence Burmese explanation (matches grammar info icon). */
+function SentenceInfoTip({
+  text,
+  readings,
+}: {
+  text: string;
+  readings: Record<string, string>;
+}) {
+  const tipId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<"above" | "below">("above");
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const updatePosition = useCallback(() => {
+    const node = triggerRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const preferBelow = rect.top < 140;
+    setPlacement(preferBelow ? "below" : "above");
+    setPos({
+      top: preferBelow ? rect.bottom : rect.top,
+      left: clampTipLeft(rect.left + rect.width / 2),
+    });
+  }, []);
+
+  const show = useCallback(() => {
+    updatePosition();
+    setOpen(true);
+  }, [updatePosition]);
+
+  const hide = useCallback(() => setOpen(false), []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const onScrollOrResize = () => updatePosition();
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || tipRef.current?.contains(target)) return;
+      hide();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") hide();
+    };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, updatePosition, hide]);
+
+  const style: CSSProperties | undefined = pos
+    ? {
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        transform:
+          placement === "above"
+            ? "translate(-50%, calc(-100% - 0.55rem))"
+            : "translate(-50%, 0.55rem)",
+      }
+    : undefined;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={UI.card.sentenceAria}
+        aria-expanded={open}
+        aria-controls={open ? tipId : undefined}
+        className={[
+          "inline-flex shrink-0 items-center justify-center p-0.5",
+          "text-muted-foreground/80 transition-colors duration-150",
+          "hover:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:rounded-sm",
+          open ? "text-sky-700 dark:text-sky-300" : "",
+        ].join(" ")}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (open) hide();
+          else show();
+        }}
+      >
+        <Info className="size-3.5" aria-hidden />
+      </button>
+      {mounted && open && pos
+        ? createPortal(
+            <div
+              ref={tipRef}
+              id={tipId}
+              role="dialog"
+              aria-label={UI.card.sentence}
+              style={style}
+              className={[
+                "z-[200] w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)]",
+                "rounded-xl border border-border/70 bg-popover/97 px-3.5 py-3 shadow-lg backdrop-blur-sm",
+                "dark:border-white/12 dark:bg-popover/95",
+              ].join(" ")}
+            >
+              <div
+                aria-hidden
+                className={[
+                  "pointer-events-none absolute left-1/2 size-2.5 -translate-x-1/2 rotate-45",
+                  "border-border/70 bg-popover/97 dark:border-white/12 dark:bg-popover/95",
+                  placement === "above"
+                    ? "bottom-[-5px] border-r border-b"
+                    : "top-[-5px] border-t border-l",
+                ].join(" ")}
+              />
+              <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+                {UI.card.sentence}
+              </p>
+              <ProseWithFurigana
+                text={text}
+                readings={readings}
+                className="mt-1.5 block max-w-full font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere] text-popover-foreground"
+              />
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function OptionJapanese({
+  japanese,
+  reading,
+  readings,
+  sentenceMode,
+  className,
+}: {
+  japanese: string;
+  reading?: string;
+  readings: Record<string, string>;
+  sentenceMode?: boolean;
+  className?: string;
+}) {
+  return (
+    <FuriganaHover
+      text={japanese || "—"}
+      reading={sentenceMode ? undefined : reading}
+      readings={readings}
+      className={className}
+    />
   );
 }
 
@@ -139,60 +330,74 @@ function MobileOptionCard({
   correct,
   zebra,
   readings,
+  sentenceMode,
 }: {
   row: JlptOptionRow;
   correct: boolean;
   zebra: boolean;
   readings: Record<string, string>;
+  sentenceMode?: boolean;
 }) {
+  const sentenceMeaning = (row.sentence_burmese ?? "").trim();
+  const hasTip = Boolean(sentenceMeaning);
+
   return (
     <div
       className={[
-        "rounded-lg border px-3.5 py-3 transition-colors duration-200",
+        "relative min-w-0 rounded-lg border px-3.5 py-3 transition-colors duration-200",
         correct
           ? "border-emerald-300/60 dark:border-emerald-400/25"
           : "border-border/50",
         optionRowClass(correct, zebra),
       ].join(" ")}
     >
-      <div className="flex items-start justify-between gap-3">
-        <span
+      {hasTip ? (
+        <div className="absolute top-3 right-3 z-10">
+          <SentenceInfoTip text={sentenceMeaning} readings={readings} />
+        </div>
+      ) : null}
+
+      <div className={hasTip ? "min-w-0 pr-10" : "min-w-0"}>
+        {correct ? (
+          <div className="mb-2">
+            <CorrectBadge />
+          </div>
+        ) : null}
+        <p
           className={[
-            "text-xs tabular-nums tracking-wide",
-            correct ? "font-semibold text-emerald-700 dark:text-emerald-300" : "text-muted-foreground",
+            "min-w-0 font-serif text-[1.05rem] leading-7 tracking-tight break-words [overflow-wrap:anywhere]",
+            correct
+              ? "font-semibold text-emerald-950 dark:text-emerald-50"
+              : "font-medium text-foreground",
           ].join(" ")}
         >
-          No. {row.option || "—"}
-        </span>
-        {correct ? <CorrectBadge /> : null}
+          <OptionJapanese
+            japanese={row.japanese}
+            reading={row.reading}
+            readings={readings}
+            sentenceMode={sentenceMode}
+          />
+        </p>
+        {row.meaning_burmese ? (
+          <ProseWithFurigana
+            text={row.meaning_burmese}
+            readings={readings}
+            className={[
+              "mt-1.5 block min-w-0 font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere]",
+              correct
+                ? "text-emerald-800/80 dark:text-emerald-100/75"
+                : "text-muted-foreground",
+            ].join(" ")}
+          />
+        ) : null}
+        {row.usage_burmese ? (
+          <ProseWithFurigana
+            text={row.usage_burmese}
+            readings={readings}
+            className="mt-1.5 block min-w-0 font-myanmar text-[12px] leading-5 break-words [overflow-wrap:anywhere] text-muted-foreground/90"
+          />
+        ) : null}
       </div>
-      <p
-        className={[
-          "mt-2 font-serif text-[1.05rem] leading-7 tracking-tight break-words",
-          correct
-            ? "font-semibold text-emerald-950 dark:text-emerald-50"
-            : "font-medium text-foreground",
-        ].join(" ")}
-      >
-        <FuriganaHover text={row.japanese || "—"} reading={row.reading} readings={readings} />
-      </p>
-      <ProseWithFurigana
-        text={row.meaning_burmese || "—"}
-        readings={readings}
-        className={[
-          "mt-1.5 block font-myanmar text-[13px] leading-6 break-words",
-          correct
-            ? "text-emerald-800/80 dark:text-emerald-100/75"
-            : "text-muted-foreground",
-        ].join(" ")}
-      />
-      {row.usage_burmese ? (
-        <ProseWithFurigana
-          text={row.usage_burmese}
-          readings={readings}
-          className="mt-1.5 block font-myanmar text-[12px] leading-5 break-words text-muted-foreground/90"
-        />
-      ) : null}
     </div>
   );
 }
@@ -200,57 +405,68 @@ function MobileOptionCard({
 function DistractorCard({
   row,
   readings,
+  sentenceMode,
 }: {
   row: JlptOptionRow;
   readings: Record<string, string>;
+  sentenceMode?: boolean;
 }) {
+  const hasBody = Boolean(row.usage_burmese || row.why_wrong_burmese);
+
+  const sentenceMeaning = (row.sentence_burmese ?? "").trim();
+  const hasTip = Boolean(sentenceMeaning);
+
   return (
-    <section className="rounded-lg border border-rose-500/15 bg-rose-500/[0.04] px-3.5 py-3 dark:border-rose-400/15 dark:bg-rose-400/[0.05]">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 rounded-md border border-rose-300/60 bg-rose-100/70 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-rose-800 dark:border-rose-400/25 dark:bg-rose-500/12 dark:text-rose-200">
-          <X className="size-2.5" aria-hidden />
-          誤答 {row.option || "—"}
-        </span>
-        <span className="font-serif text-[15px] font-medium tracking-tight text-foreground">
-          <FuriganaHover text={row.japanese || "—"} reading={row.reading} readings={readings} />
-        </span>
-      </div>
-      <dl className="mt-2.5 space-y-2">
-        <div>
-          <SectionLabel>Meaning</SectionLabel>
-          <dd className="mt-1">
-            <ProseWithFurigana
-              text={row.meaning_burmese || "—"}
-              readings={readings}
-              className="font-myanmar text-[13px] leading-6 break-words text-muted-foreground"
-            />
-          </dd>
+    <section className="relative min-w-0 rounded-lg border border-rose-500/15 bg-rose-500/[0.04] px-3.5 py-3 dark:border-rose-400/15 dark:bg-rose-400/[0.05]">
+      {hasTip ? (
+        <div className="absolute top-3 right-3 z-10">
+          <SentenceInfoTip text={sentenceMeaning} readings={readings} />
         </div>
-        {row.usage_burmese ? (
-          <div>
-            <SectionLabel>Usage & context</SectionLabel>
-            <dd className="mt-1">
-              <ProseWithFurigana
-                text={row.usage_burmese}
-                readings={readings}
-                className="font-myanmar text-[13px] leading-6 break-words text-muted-foreground"
-              />
-            </dd>
-          </div>
+      ) : null}
+      <div className={hasTip ? "min-w-0 pr-10" : "min-w-0"}>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md border border-rose-300/60 bg-rose-100/70 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-rose-800 dark:border-rose-400/25 dark:bg-rose-500/12 dark:text-rose-200">
+            <X className="size-2.5" aria-hidden />
+            {UI.card.wrong}
+          </span>
+          <span className="min-w-0 font-serif text-[15px] font-medium tracking-tight break-words [overflow-wrap:anywhere] text-foreground">
+            <OptionJapanese
+              japanese={row.japanese}
+              reading={row.reading}
+              readings={readings}
+              sentenceMode={sentenceMode}
+            />
+          </span>
+        </div>
+        {hasBody ? (
+          <dl className="mt-2.5 space-y-2">
+            {row.usage_burmese ? (
+              <div className="min-w-0">
+                <SectionLabel>{UI.card.usageContext}</SectionLabel>
+                <dd className="mt-1">
+                  <ProseWithFurigana
+                    text={row.usage_burmese}
+                    readings={readings}
+                    className="min-w-0 font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere] text-muted-foreground"
+                  />
+                </dd>
+              </div>
+            ) : null}
+            {row.why_wrong_burmese ? (
+              <div className="min-w-0">
+                <SectionLabel tone="rose">{UI.card.whyWrong}</SectionLabel>
+                <dd className="mt-1">
+                  <ProseWithFurigana
+                    text={row.why_wrong_burmese}
+                    readings={readings}
+                    className="min-w-0 font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere] text-muted-foreground"
+                  />
+                </dd>
+              </div>
+            ) : null}
+          </dl>
         ) : null}
-        {row.why_wrong_burmese ? (
-          <div>
-            <SectionLabel tone="rose">Why it doesn&apos;t fit</SectionLabel>
-            <dd className="mt-1">
-              <ProseWithFurigana
-                text={row.why_wrong_burmese}
-                readings={readings}
-                className="font-myanmar text-[13px] leading-6 break-words text-muted-foreground"
-              />
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+      </div>
     </section>
   );
 }
@@ -262,18 +478,43 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
   const targetMeaningLine = useMemo(() => resolveTargetMeaningLine(question), [question]);
   const hideStem = shouldHideStem(question);
   const headword = question.target_word.trim();
+  /** Mondai 1 (漢字読み) / Mondai 2 (表記): underline the asked word in the stem. */
+  const highlightTarget = useMemo(() => {
+    if ((question.mondai_type !== 1 && question.mondai_type !== 2) || !headword) return null;
+    const candidates = [headword];
+    const kana = question.reading.trim();
+    // Mondai 2 often prints the target in kana in the stem.
+    if (kana) candidates.push(kana);
+    // Token pieces that make up the target (e.g. 計 + 画 for 計画).
+    for (const token of question.furigana_tokens) {
+      const surface = token.surface.trim();
+      if (!surface) continue;
+      if (
+        surface === headword ||
+        surface === kana ||
+        (surface.length < headword.length && headword.includes(surface))
+      ) {
+        candidates.push(surface);
+      }
+    }
+    return candidates;
+  }, [question.mondai_type, question.furigana_tokens, question.reading, headword]);
   const distractors = question.options_table.filter(
     (row) => !isCorrectOption(row.option, question.correct_option),
   );
+  const isMondai6 = question.mondai_type === 6;
   const hasDistractorDetail = distractors.some(
-    (row) => row.usage_burmese || row.why_wrong_burmese || row.meaning_burmese,
+    (row) =>
+      row.usage_burmese ||
+      row.why_wrong_burmese ||
+      row.sentence_burmese,
   );
   const hasDetails = Boolean(
     question.explanation_burmese || question.nuance_note || hasDistractorDetail,
   );
 
   return (
-    <article className="w-full overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] transition-shadow duration-200 hover:shadow-sm dark:border-border/50 dark:ring-white/[0.03]">
+    <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] transition-shadow duration-200 hover:shadow-sm dark:border-border/50 dark:ring-white/[0.03]">
       <div className="border-b border-border/50 bg-muted/15 px-4 py-3.5 sm:px-5 sm:py-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide">
@@ -288,7 +529,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
               className="ml-auto rounded-md border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
             >
               <Check className="size-3 text-emerald-600 dark:text-emerald-300" aria-hidden />
-              正解 {question.correct_option}
+              {UI.card.correct} {question.correct_option}
             </Badge>
           ) : null}
         </div>
@@ -299,7 +540,8 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
             text={headword}
             reading={question.reading}
             readings={readings}
-            className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words text-foreground sm:text-lg sm:leading-[1.6]"
+            highlight={highlightTarget}
+            className="mt-3 block min-w-0 font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words [overflow-wrap:anywhere] text-foreground sm:text-lg sm:leading-[1.6]"
           />
         ) : (
           <FuriganaHover
@@ -307,7 +549,8 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
             tokens={hideStem ? undefined : question.furigana_tokens}
             reading={hideStem ? question.reading : undefined}
             readings={readings}
-            className="mt-3 block font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words text-foreground sm:text-lg sm:leading-[1.6]"
+            highlight={highlightTarget}
+            className="mt-3 block min-w-0 font-serif text-[1.05rem] leading-[1.65] tracking-tight break-words [overflow-wrap:anywhere] text-foreground sm:text-lg sm:leading-[1.6]"
           />
         )}
 
@@ -315,16 +558,16 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
         {targetMeaningLine ? (
           <p
             lang="my"
-            className="mt-1.5 font-myanmar text-[13px] leading-6 break-words text-foreground/80"
+            className="mt-1.5 min-w-0 font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere] text-foreground/80"
           >
             {targetMeaningLine}
           </p>
         ) : question.reading && hideStem ? (
-          <p className="mt-1.5 text-sm tracking-[0.06em] break-words text-muted-foreground">
+          <p className="mt-1.5 min-w-0 text-sm tracking-[0.06em] break-words [overflow-wrap:anywhere] text-muted-foreground">
             {question.reading}
           </p>
         ) : !hideStem && headword && headword !== question.japanese_sentence.trim() ? (
-          <p className="mt-2 text-sm font-medium break-words text-foreground/85">
+          <p className="mt-2 min-w-0 text-sm font-medium break-words [overflow-wrap:anywhere] text-foreground/85">
             <FuriganaHover
               text={headword}
               reading={question.reading}
@@ -334,10 +577,10 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
         ) : null}
       </div>
 
-      <div className="p-3.5 sm:p-4">
+      <div className="min-w-0 p-3.5 sm:p-4">
         {question.options_table.length > 0 ? (
           <>
-            <div className="grid gap-2 sm:hidden">
+            <div className="grid min-w-0 gap-2 sm:hidden">
               {question.options_table.map((row, index) => {
                 const correct = isCorrectOption(row.option, question.correct_option);
                 return (
@@ -347,6 +590,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                     correct={correct}
                     zebra={index % 2 === 1}
                     readings={readings}
+                    sentenceMode={isMondai6}
                   />
                 );
               })}
@@ -355,20 +599,16 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
             <div className="hidden overflow-hidden rounded-lg border border-border/55 dark:border-white/8 sm:block">
               <table className="w-full table-fixed border-collapse text-left text-sm">
                 <colgroup>
-                  <col className="w-12" />
-                  <col className="w-[34%]" />
+                  <col className="w-[42%]" />
                   <col />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/35">
                     <th className="px-3.5 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                      No.
+                      {isMondai6 ? UI.card.exampleUse : UI.card.kanji}
                     </th>
                     <th className="px-3.5 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                      漢字
-                    </th>
-                    <th className="px-3.5 py-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                      意味
+                      {UI.card.meaning}
                     </th>
                   </tr>
                 </thead>
@@ -376,6 +616,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                   {question.options_table.map((row, index) => {
                     const correct = isCorrectOption(row.option, question.correct_option);
                     const zebra = index % 2 === 1;
+                    const sentenceMeaning = (row.sentence_burmese ?? "").trim();
                     return (
                       <tr
                         key={`${question.mondai_type}-${question.question_number}-${row.option}-${row.japanese}`}
@@ -384,55 +625,59 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                           optionRowClass(correct, zebra),
                         ].join(" ")}
                       >
-                        <td
-                          className={[
-                            "px-3.5 py-3 align-middle text-xs tabular-nums",
-                            correct
-                              ? "font-semibold text-emerald-700 dark:text-emerald-300"
-                              : "text-muted-foreground",
-                          ].join(" ")}
-                        >
-                          {row.option || "—"}
-                        </td>
-                        <td className="px-3.5 py-3 align-middle">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
+                        <td className="min-w-0 px-3.5 py-3 align-middle">
+                          <div className="flex min-w-0 items-start gap-2">
+                            <div
                               className={[
-                                "font-serif text-[15px] leading-7 tracking-tight break-words",
+                                "min-w-0 flex-1 font-serif text-[15px] leading-7 tracking-tight break-words [overflow-wrap:anywhere]",
                                 correct
                                   ? "font-semibold text-emerald-950 dark:text-emerald-50"
                                   : "font-medium text-foreground",
                               ].join(" ")}
                             >
-                              <FuriganaHover
-                                text={row.japanese || "—"}
+                              <OptionJapanese
+                                japanese={row.japanese}
                                 reading={row.reading}
                                 readings={readings}
+                                sentenceMode={isMondai6}
                               />
-                            </span>
-                            {correct ? <CorrectBadge /> : null}
+                            </div>
+                            {sentenceMeaning ? (
+                              <div className="mt-0.5 shrink-0">
+                                <SentenceInfoTip text={sentenceMeaning} readings={readings} />
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                         <td
                           className={[
-                            "px-3.5 py-3 align-middle font-myanmar text-[13px] leading-6 break-words",
+                            "min-w-0 px-3.5 py-3 align-middle font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere]",
                             correct
                               ? "text-emerald-800/80 dark:text-emerald-100/75"
                               : "text-muted-foreground",
                           ].join(" ")}
                         >
-                          <ProseWithFurigana
-                            text={row.meaning_burmese || "—"}
-                            readings={readings}
-                            className="block"
-                          />
-                          {row.usage_burmese ? (
-                            <ProseWithFurigana
-                              text={row.usage_burmese}
-                              readings={readings}
-                              className="mt-1 block text-[12px] leading-5 opacity-85"
-                            />
-                          ) : null}
+                          <div className="flex items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                              <ProseWithFurigana
+                                text={row.meaning_burmese || "—"}
+                                readings={readings}
+                                className="block"
+                              />
+                              {row.usage_burmese ? (
+                                <ProseWithFurigana
+                                  text={row.usage_burmese}
+                                  readings={readings}
+                                  className="mt-1 block text-[12px] leading-5 opacity-85"
+                                />
+                              ) : null}
+                            </div>
+                            {correct ? (
+                              <div className="mt-0.5 shrink-0">
+                                <CorrectBadge />
+                              </div>
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -461,10 +706,10 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
             >
               <span className="min-w-0">
                 <span className="block text-sm font-semibold tracking-tight text-foreground">
-                  Explanation & Distractors
+                  {UI.card.explanationDetails}
                 </span>
                 <span lang="my" className="mt-0.5 block font-myanmar text-xs leading-5 text-muted-foreground">
-                  အသေးစိတ် ရှင်းလင်းချက် နှင့် မှားသော ရွေးချယ်မှုများ
+                  {UI.card.explanationMy}
                 </span>
               </span>
               <span
@@ -487,7 +732,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                 <div className="space-y-2.5 border-t border-border/40 px-3.5 pt-3 pb-3.5 dark:border-white/8">
                   {question.explanation_burmese ? (
                     <section className="rounded-lg border border-border/50 bg-background/70 px-3.5 py-3 dark:border-white/8 dark:bg-black/15">
-                      <SectionLabel tone="sky">Explanation</SectionLabel>
+                      <SectionLabel tone="sky">{UI.card.explanation}</SectionLabel>
                       <ProseWithFurigana
                         text={question.explanation_burmese}
                         readings={readings}
@@ -497,7 +742,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                   ) : null}
                   {question.nuance_note ? (
                     <section className="rounded-lg border border-amber-500/35 bg-amber-50/80 px-3.5 py-3 dark:border-amber-500/30 dark:bg-amber-950/20">
-                      <SectionLabel tone="amber">Nuance & Context</SectionLabel>
+                      <SectionLabel tone="amber">{UI.card.nuanceContext}</SectionLabel>
                       <ProseWithFurigana
                         text={question.nuance_note}
                         readings={readings}
@@ -507,13 +752,14 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                   ) : null}
                   {hasDistractorDetail ? (
                     <section className="space-y-2">
-                      <SectionLabel tone="rose">Wrong options</SectionLabel>
+                      <SectionLabel tone="rose">{UI.card.wrongOptions}</SectionLabel>
                       <div className="grid gap-2">
                         {distractors.map((row) => (
                           <DistractorCard
                             key={`d-${question.mondai_type}-${question.question_number}-${row.option}-${row.japanese}`}
                             row={row}
                             readings={readings}
+                            sentenceMode={isMondai6}
                           />
                         ))}
                       </div>

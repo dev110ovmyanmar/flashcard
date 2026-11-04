@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   annotateProse,
+  applyHighlightsToSegments,
   applyReadingMap,
+  expandHighlightTargets,
   harvestMarkupReadings,
   hasKanji,
   parseFuriganaMarkup,
@@ -122,4 +124,26 @@ test("harvestMarkupReadings collects pairs into a map", () => {
   const map = harvestMarkupReadings("非現実的《ひげんじつてき》 နှင့် 現実的《げんじつてき》");
   assert.equal(map["非現実的"], "ひげんじつてき");
   assert.equal(map["現実的"], "げんじつてき");
+});
+
+test("expandHighlightTargets strips markup and keeps kanji runs", () => {
+  const targets = expandHighlightTargets("計画《けいかく》");
+  assert.ok(targets.includes("計画"));
+});
+
+test("applyHighlightsToSegments marks consecutive token pieces", () => {
+  const marked = applyHighlightsToSegments(
+    [{ surface: "その" }, { surface: "計" }, { surface: "画" }, { surface: "は" }],
+    ["計画"],
+  );
+  assert.equal(marked[1]?.highlight, true);
+  assert.equal(marked[2]?.highlight, true);
+  assert.equal(marked[0]?.highlight, false);
+  assert.equal(marked[3]?.highlight, false);
+});
+
+test("applyHighlightsToSegments splits a longer surface containing the target", () => {
+  const marked = applyHighlightsToSegments([{ surface: "その計画は失敗した。" }], ["計画"]);
+  const highlighted = marked.filter((part) => part.highlight).map((part) => part.surface);
+  assert.deepEqual(highlighted, ["計画"]);
 });
