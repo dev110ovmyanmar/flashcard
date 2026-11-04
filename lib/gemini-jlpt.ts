@@ -8,6 +8,7 @@ import {
   type JlptQuestion,
 } from "@/src/constants/jlptPrompt";
 import { stripForeignGlosses } from "@/lib/clean-burmese";
+import { splitIncorrectReasonBody } from "@/lib/grammar-format";
 import { primaryMeaning } from "@/lib/jlpt-to-goi";
 
 /** Primary model for JLPT vision analysis — Flash-Lite for lowest latency. */
@@ -77,7 +78,21 @@ const JLPT_RESPONSE_SCHEMA = {
                   description:
                     "Natural Burmese meaning of this option for the 意味 table. May include multiple senses. Not the short header gloss.",
                 },
-                usage_burmese: { type: "STRING" },
+                usage_burmese: {
+                  type: "STRING",
+                  description:
+                    "Typical usage / collocation scene in Burmese only. Do not embed Japanese example sentences.",
+                },
+                example_sentence: {
+                  type: "STRING",
+                  description:
+                    "Short Japanese example using this option (required for Mondai 3–5). Empty for Mondai 6. Use 漢字《ひらがな》.",
+                },
+                example_burmese: {
+                  type: "STRING",
+                  description:
+                    "Natural Burmese translation of example_sentence. Empty when example_sentence is empty.",
+                },
                 sentence_burmese: {
                   type: "STRING",
                   description:
@@ -91,6 +106,8 @@ const JLPT_RESPONSE_SCHEMA = {
                 "reading",
                 "meaning_burmese",
                 "usage_burmese",
+                "example_sentence",
+                "example_burmese",
                 "sentence_burmese",
                 "why_wrong_burmese",
               ],
@@ -961,9 +978,23 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
     const meaning_burmese = stripForeignGlosses(
       asString(item.meaning_burmese ?? item.meaningBurmese ?? item.burmese ?? item.meaning ?? item.myanmar),
     );
-    const usage_burmese = stripForeignGlosses(
+    let usage_burmese = stripForeignGlosses(
       asString(item.usage_burmese ?? item.usageBurmese ?? item.usage ?? item.context ?? item.collocation),
     );
+    let example_sentence = asString(
+      item.example_sentence ?? item.exampleSentence ?? item.example ?? item.usage_example,
+    );
+    let example_burmese = stripForeignGlosses(
+      asString(item.example_burmese ?? item.exampleBurmese ?? item.example_meaning_burmese),
+    );
+    // Legacy: models used to embed 「ဥပမာ: …」 inside usage_burmese — peel it out.
+    if (!example_sentence && usage_burmese) {
+      const split = splitIncorrectReasonBody(usage_burmese);
+      if (split.example) {
+        usage_burmese = stripForeignGlosses(split.body);
+        example_sentence = split.example;
+      }
+    }
     const sentence_burmese = stripForeignGlosses(
       asString(
         item.sentence_burmese ??
@@ -990,6 +1021,8 @@ function tidyOptions(value: unknown): JlptOptionRow[] {
       reading,
       meaning_burmese,
       usage_burmese,
+      example_sentence,
+      example_burmese,
       sentence_burmese,
       why_wrong_burmese,
     });

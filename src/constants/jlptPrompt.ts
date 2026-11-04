@@ -19,8 +19,15 @@ export type JlptOptionRow = {
   /** Hiragana reading for the option headword (empty if already kana / N/A). */
   reading: string;
   meaning_burmese: string;
-  /** Typical usage, collocations, or nuance (Burmese). */
+  /** Typical usage, collocations, or nuance (Burmese). Do not embed example sentences here. */
   usage_burmese: string;
+  /**
+   * Short Japanese example using this option (Mondai 3–5). Empty for Mondai 6
+   * where `japanese` itself is the usage sentence. Kanji as 漢字《ひらがな》.
+   */
+  example_sentence: string;
+  /** Natural Burmese translation of `example_sentence`. Empty when no example. */
+  example_burmese: string;
   /**
    * Full natural Burmese translation / explanation of `japanese` when it is a
    * complete example sentence (esp. Mondai 6 用法). Empty when not needed.
@@ -95,7 +102,9 @@ const JLPT_OUTPUT_EXAMPLE = `
           "japanese": "現実的",
           "reading": "げんじつてき",
           "meaning_burmese": "လက်တွေ့ကျသော၊ ဖြစ်နိုင်သော။",
-          "usage_burmese": "အစီအစဉ် သို့မဟုတ် အမြင်ကို လက်တွေ့ကျသည်ဟု ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 現実的《げんじつてき》な計画。",
+          "usage_burmese": "အစီအစဉ် သို့မဟုတ် အမြင်ကို လက်တွေ့ကျသည်ဟု ပြောသည့်အခါ သုံးသည်။",
+          "example_sentence": "現実的《げんじつてき》な計画《けいかく》を立《た》てる。",
+          "example_burmese": "လက်တွေ့ကျသော အစီအစဉ် ရေးဆွဲသည်။",
           "sentence_burmese": "",
           "why_wrong_burmese": "ဤဝါကျက မယုံနိုင်လောက်အောင် လက်တွေ့မကျခြင်းကို လိုအပ်သည်။ 現実的《げんじつてき》 က ဆန့်ကျင်ဘက်ဖြစ်သည်။"
         },
@@ -104,7 +113,9 @@ const JLPT_OUTPUT_EXAMPLE = `
           "japanese": "非現実的",
           "reading": "ひげんじつてき",
           "meaning_burmese": "လက်တွေ့မကျသော၊ မဖြစ်နိုင်သော။",
-          "usage_burmese": "ယုံရန်ခက်သော စကား သို့မဟုတ် အစီအစဉ်ကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 非現実的《ひげんじつてき》な話。",
+          "usage_burmese": "ယုံရန်ခက်သော စကား သို့မဟုတ် အစီအစဉ်ကို ပြောသည့်အခါ သုံးသည်။",
+          "example_sentence": "非現実的《ひげんじつてき》な話《はなし》だ。",
+          "example_burmese": "လက်တွေ့မကျသော စကား ဖြစ်သည်။",
           "sentence_burmese": "",
           "why_wrong_burmese": ""
         },
@@ -113,7 +124,9 @@ const JLPT_OUTPUT_EXAMPLE = `
           "japanese": "積極的",
           "reading": "せっきょくてき",
           "meaning_burmese": "တက်ကြွသော၊ ရှေ့တိုးသော။",
-          "usage_burmese": "သဘောထား သို့မဟုတ် လုပ်ဆောင်မှုကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 積極的《せっきょくてき》に参加する。",
+          "usage_burmese": "သဘောထား သို့မဟုတ် လုပ်ဆောင်မှုကို ပြောသည့်အခါ သုံးသည်။",
+          "example_sentence": "積極的《せっきょくてき》に参加《さんか》する。",
+          "example_burmese": "တက်ကြွစွာ ပါဝင်သည်။",
           "sentence_burmese": "",
           "why_wrong_burmese": "စိတ်ဓာတ်ကို ပြသော်လည်း ‘မယုံနိုင်လောက်အောင် လက်တွေ့မကျ’ အဓိပ္ပာယ်ကို မပေးပါ။"
         },
@@ -122,7 +135,9 @@ const JLPT_OUTPUT_EXAMPLE = `
           "japanese": "消極的",
           "reading": "しょうきょくてき",
           "meaning_burmese": "ရှေ့မတိုးသော၊ တက်ကြွမှုနည်းသော။",
-          "usage_burmese": "တွန့်ဆုတ်သော သဘောထားကို ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 消極的《しょうきょくてき》な態度。",
+          "usage_burmese": "တွန့်ဆုတ်သော သဘောထားကို ပြောသည့်အခါ သုံးသည်။",
+          "example_sentence": "消極的《しょうきょくてき》な態度《たいど》。",
+          "example_burmese": "ရှေ့မတိုးသော သဘောထား။",
           "sentence_burmese": "",
           "why_wrong_burmese": "သဘောထားကိုသာ ပြပြီး ဤဝါကျလိုအပ်သော အဓိပ္ပာယ်နှင့် မကိုက်ညီပါ။"
         }
@@ -160,11 +175,21 @@ ${LANGUAGE_LOCK_JA}
 9. options_table: 各選択肢
    - option / japanese / reading
    - meaning_burmese: その選択肢の実際の意味（自然なビルマ語）。意味テーブル用。設問ヘッダー用の短語ルールは適用しない
-   - usage_burmese: 典型的な使い方・場面・よく来る結びつき（自然なビルマ語）。短い日本語例があれば漢字に《読み》を付ける
+   - usage_burmese: 典型的な使い方・場面・よく来る結びつき（自然なビルマ語のみ）。日本語例文は入れない
+   - example_sentence: その語の短い日本語例文（問題3〜5は必須。問題6は ""）。漢字は《ひらがな》
+   - example_burmese: example_sentence の自然なビルマ語訳（例文があるとき必須）
    - sentence_burmese: 選択肢 japanese が完整な文のとき、その文全体の自然なビルマ語訳／解説（問題6は必須。語のみなら ""）
    - why_wrong_burmese: 誤答のみ、この設問の文脈で不適切な理由（自然なビルマ語）。正解は ""
 10. explanation_burmese: 設問文の意味を踏まえ、なぜ正解かを簡潔でわかりやすい自然なビルマ語で説明
 11. nuance_note: 類義語の違いや注意点を、短く自然なビルマ語で補足
+
+# 問題3・問題4・問題5（語形成・文脈規定・言い換え）の特別ルール
+- explanation_burmese と nuance_note は必ず自然なビルマ語で書く（空文字・日本語のみ・英語のみは禁止）
+- 誤答3つの why_wrong_burmese は必ず自然なビルマ語で、この空欄／文脈になぜ合わないかを具体的に書く（空文字禁止）
+- 各選択肢に example_sentence（短い日本語例文・漢字《読み》）と example_burmese（そのビルマ語訳）を必須で入れる
+- usage_burmese には「ဥပမာ:」「例:」や日本語例文を埋め込まない（例文は example_sentence / example_burmese へ分離）
+- sentence_burmese は語見出しの選択肢なので ""
+- UIは example を info アイコン押下で表示する想定。例文フィールドを省略しないこと
 
 # 問題6（用法）の特別ルール
 - japanese_sentence と target_word は見出し語のみ（例: 「掲示」）。4つの用例文を連結して入れない
@@ -188,8 +213,10 @@ ${LANGUAGE_LOCK_JA}
 - 設問文（japanese_sentence）の文脈をよく読んでから書く。一般論だけの説明は禁止
 - explanation_burmese: 文が何を求めているか → なぜ正解が合うかをはっきり書く。大げさ・説教調・ドラマチックな言い回しは使わない
 - why_wrong_burmese: その選択肢の意味は何か → この空欄／文脈になぜ合わないかを具体的に書く
-- usage_burmese: 実際によく使う場面を短く。必要なら短い例文を1つ
+- usage_burmese: 実際によく使う場面を短く（ビルマ語のみ）。例文は example_sentence へ
+- example_sentence / example_burmese: 問題3〜5の各選択肢で必須。マーカー「ဥပမာ:」は付けない
 - 長くしすぎない。はっきり・短く・正確に。ただし文脈が分かる程度の情報は省かない
+- 問題3・4では explanation_burmese / nuance_note / 誤答の why_wrong_burmese を絶対に省略しない
 
 # ビルマ語の書き方（簡潔・自然）
 - 機械翻訳調・ぎこちない直訳を避ける
@@ -200,7 +227,7 @@ ${LANGUAGE_LOCK_JA}
 - 有効なJSONのみ。Markdown・コードフェンス・前後の説明文禁止
 - ルート: { "questions": [ ... ] }
 - 設問キーのみ: mondai_type, question_number, japanese_sentence, furigana_tokens, target_word, reading, meaning_burmese, correct_option, options_table, explanation_burmese, nuance_note
-- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, sentence_burmese, why_wrong_burmese
+- options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, example_sentence, example_burmese, sentence_burmese, why_wrong_burmese
 - furigana_tokens キーのみ: surface, reading
 - 並び: mondai_type → question_number 昇順`;
 

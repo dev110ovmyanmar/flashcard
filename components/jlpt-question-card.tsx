@@ -88,6 +88,8 @@ export function buildQuestionReadings(question: JlptQuestion): Record<string, st
     harvestMarkupReadings(row.japanese, map);
     harvestMarkupReadings(row.meaning_burmese, map);
     harvestMarkupReadings(row.usage_burmese, map);
+    harvestMarkupReadings(row.example_sentence ?? "", map);
+    harvestMarkupReadings(row.example_burmese ?? "", map);
     harvestMarkupReadings(row.sentence_burmese ?? "", map);
     harvestMarkupReadings(row.why_wrong_burmese, map);
   }
@@ -124,12 +126,47 @@ function clampTipLeft(anchorCenterX: number, tipMaxWidthRem = 22) {
   return Math.min(window.innerWidth - half - 12, Math.max(half + 12, anchorCenterX));
 }
 
-/** Mondai 6: tip for the full-sentence Burmese explanation (matches grammar info icon). */
-function SentenceInfoTip({
-  text,
+/** Tip content for option info icon (Mondai 6 sentence meaning, or Mondai 3–5 example use). */
+export function resolveOptionExampleTip(row: JlptOptionRow, mondaiType: number): {
+  japanese: string;
+  burmese: string;
+  label: string;
+  ariaLabel: string;
+} | null {
+  if (mondaiType === 6) {
+    const burmese = (row.sentence_burmese ?? "").trim();
+    if (!burmese) return null;
+    return {
+      japanese: "",
+      burmese,
+      label: UI.card.sentence,
+      ariaLabel: UI.card.sentenceAria,
+    };
+  }
+
+  const japanese = (row.example_sentence ?? "").trim();
+  const burmese = (row.example_burmese ?? "").trim();
+  if (!japanese && !burmese) return null;
+  return {
+    japanese,
+    burmese,
+    label: UI.card.example,
+    ariaLabel: UI.card.example,
+  };
+}
+
+/** Click-to-open tip: Mondai 6 full-sentence meaning, or Mondai 3–5 example use. */
+function OptionExampleTip({
+  japanese,
+  burmese,
+  label,
+  ariaLabel,
   readings,
 }: {
-  text: string;
+  japanese: string;
+  burmese: string;
+  label: string;
+  ariaLabel: string;
   readings: Record<string, string>;
 }) {
   const tipId = useId();
@@ -201,7 +238,7 @@ function SentenceInfoTip({
       <button
         ref={triggerRef}
         type="button"
-        aria-label={UI.card.sentenceAria}
+        aria-label={ariaLabel}
         aria-expanded={open}
         aria-controls={open ? tipId : undefined}
         className={[
@@ -226,7 +263,7 @@ function SentenceInfoTip({
               ref={tipRef}
               id={tipId}
               role="dialog"
-              aria-label={UI.card.sentence}
+              aria-label={label}
               style={style}
               className={[
                 "z-[200] w-[min(22rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)]",
@@ -245,13 +282,25 @@ function SentenceInfoTip({
                 ].join(" ")}
               />
               <p className="text-[10px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                {UI.card.sentence}
+                {label}
               </p>
-              <ProseWithFurigana
-                text={text}
-                readings={readings}
-                className="mt-1.5 block max-w-full font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere] text-popover-foreground"
-              />
+              {japanese ? (
+                <FuriganaHover
+                  text={japanese}
+                  readings={readings}
+                  className="mt-1.5 block max-w-full font-serif text-[14px] leading-6 tracking-tight break-words [overflow-wrap:anywhere] text-popover-foreground"
+                />
+              ) : null}
+              {burmese ? (
+                <ProseWithFurigana
+                  text={burmese}
+                  readings={readings}
+                  className={[
+                    "block max-w-full font-myanmar text-[13px] leading-6 break-words [overflow-wrap:anywhere]",
+                    japanese ? "mt-1.5 text-muted-foreground" : "mt-1.5 text-popover-foreground",
+                  ].join(" ")}
+                />
+              ) : null}
             </div>,
             document.body,
           )
@@ -331,15 +380,17 @@ function MobileOptionCard({
   zebra,
   readings,
   sentenceMode,
+  mondaiType,
 }: {
   row: JlptOptionRow;
   correct: boolean;
   zebra: boolean;
   readings: Record<string, string>;
   sentenceMode?: boolean;
+  mondaiType: number;
 }) {
-  const sentenceMeaning = (row.sentence_burmese ?? "").trim();
-  const hasTip = Boolean(sentenceMeaning);
+  const tip = resolveOptionExampleTip(row, mondaiType);
+  const hasTip = Boolean(tip);
 
   return (
     <div
@@ -351,9 +402,15 @@ function MobileOptionCard({
         optionRowClass(correct, zebra),
       ].join(" ")}
     >
-      {hasTip ? (
+      {tip ? (
         <div className="absolute top-3 right-3 z-10">
-          <SentenceInfoTip text={sentenceMeaning} readings={readings} />
+          <OptionExampleTip
+            japanese={tip.japanese}
+            burmese={tip.burmese}
+            label={tip.label}
+            ariaLabel={tip.ariaLabel}
+            readings={readings}
+          />
         </div>
       ) : null}
 
@@ -406,21 +463,28 @@ function DistractorCard({
   row,
   readings,
   sentenceMode,
+  mondaiType,
 }: {
   row: JlptOptionRow;
   readings: Record<string, string>;
   sentenceMode?: boolean;
+  mondaiType: number;
 }) {
   const hasBody = Boolean(row.usage_burmese || row.why_wrong_burmese);
-
-  const sentenceMeaning = (row.sentence_burmese ?? "").trim();
-  const hasTip = Boolean(sentenceMeaning);
+  const tip = resolveOptionExampleTip(row, mondaiType);
+  const hasTip = Boolean(tip);
 
   return (
     <section className="relative min-w-0 rounded-lg border border-rose-500/15 bg-rose-500/[0.04] px-3.5 py-3 dark:border-rose-400/15 dark:bg-rose-400/[0.05]">
-      {hasTip ? (
+      {tip ? (
         <div className="absolute top-3 right-3 z-10">
-          <SentenceInfoTip text={sentenceMeaning} readings={readings} />
+          <OptionExampleTip
+            japanese={tip.japanese}
+            burmese={tip.burmese}
+            label={tip.label}
+            ariaLabel={tip.ariaLabel}
+            readings={readings}
+          />
         </div>
       ) : null}
       <div className={hasTip ? "min-w-0 pr-10" : "min-w-0"}>
@@ -507,6 +571,8 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
     (row) =>
       row.usage_burmese ||
       row.why_wrong_burmese ||
+      row.example_sentence ||
+      row.example_burmese ||
       row.sentence_burmese,
   );
   const hasDetails = Boolean(
@@ -591,6 +657,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                     zebra={index % 2 === 1}
                     readings={readings}
                     sentenceMode={isMondai6}
+                    mondaiType={question.mondai_type}
                   />
                 );
               })}
@@ -616,7 +683,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                   {question.options_table.map((row, index) => {
                     const correct = isCorrectOption(row.option, question.correct_option);
                     const zebra = index % 2 === 1;
-                    const sentenceMeaning = (row.sentence_burmese ?? "").trim();
+                    const tip = resolveOptionExampleTip(row, question.mondai_type);
                     return (
                       <tr
                         key={`${question.mondai_type}-${question.question_number}-${row.option}-${row.japanese}`}
@@ -642,9 +709,15 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                                 sentenceMode={isMondai6}
                               />
                             </div>
-                            {sentenceMeaning ? (
+                            {tip ? (
                               <div className="mt-0.5 shrink-0">
-                                <SentenceInfoTip text={sentenceMeaning} readings={readings} />
+                                <OptionExampleTip
+                                  japanese={tip.japanese}
+                                  burmese={tip.burmese}
+                                  label={tip.label}
+                                  ariaLabel={tip.ariaLabel}
+                                  readings={readings}
+                                />
                               </div>
                             ) : null}
                           </div>
@@ -760,6 +833,7 @@ export function JlptQuestionCard({ question }: { question: JlptQuestion }) {
                             row={row}
                             readings={readings}
                             sentenceMode={isMondai6}
+                            mondaiType={question.mondai_type}
                           />
                         ))}
                       </div>

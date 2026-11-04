@@ -38,6 +38,8 @@ const SAMPLE = {
           reading: "せいこう",
           meaning_burmese: "အောင်မြင်ခြင်း",
           usage_burmese: "အောင်မြင်သည်ဟု သုံး",
+          example_sentence: "計画《けいかく》が成功《せいこう》した。",
+          example_burmese: "အစီအစဉ် အောင်မြင်ခဲ့သည်။",
           sentence_burmese: "",
           why_wrong_burmese: "ဆန့်ကျင်ဘက်",
         },
@@ -47,6 +49,8 @@ const SAMPLE = {
           reading: "かんせい",
           meaning_burmese: "ပြီးဆုံးခြင်း",
           usage_burmese: "ပြီးသည်ဟု သုံး",
+          example_sentence: "工事《こうじ》が完成《かんせい》した。",
+          example_burmese: "အလုပ် ပြီးဆုံးခဲ့သည်။",
           sentence_burmese: "",
           why_wrong_burmese: "မကိုက်ညီ",
         },
@@ -56,6 +60,8 @@ const SAMPLE = {
           reading: "しっぱい",
           meaning_burmese: "မအောင်မြင်ခြင်း",
           usage_burmese: "မအောင်မြင်ဟု သုံး",
+          example_sentence: "計画《けいかく》は失敗《しっぱい》に終《お》わった。",
+          example_burmese: "အစီအစဉ် မအောင်မြင်ဘဲ ပြီးသွားသည်။",
           sentence_burmese: "",
           why_wrong_burmese: "",
         },
@@ -65,6 +71,8 @@ const SAMPLE = {
           reading: "けいぞく",
           meaning_burmese: "ဆက်လက်လုပ်ခြင်း",
           usage_burmese: "ဆက်လုပ်သည်ဟု သုံး",
+          example_sentence: "作業《さぎょう》を継続《けいぞく》する。",
+          example_burmese: "အလုပ်ကို ဆက်လုပ်သည်။",
           sentence_burmese: "",
           why_wrong_burmese: "မကိုက်ညီ",
         },
@@ -189,6 +197,46 @@ test("accepts Mondai 1–6 and sorts; drops out-of-range types", () => {
       [6, 2],
     ],
   );
+});
+
+test("peels embedded ဥပမာ example out of legacy usage_burmese", () => {
+  const result = questionsFromGemini(
+    JSON.stringify({
+      questions: [
+        {
+          ...SAMPLE.questions[0],
+          mondai_type: 4,
+          options_table: [
+            {
+              option: "1",
+              japanese: "現実的",
+              reading: "げんじつてき",
+              meaning_burmese: "လက်တွေ့ကျသော",
+              usage_burmese:
+                "အစီအစဉ်ကို လက်တွေ့ကျသည်ဟု ပြောသည့်အခါ သုံးသည်။ ဥပမာ: 現実的《げんじつてき》な計画。",
+              sentence_burmese: "",
+              why_wrong_burmese: "ဆန့်ကျင်ဘက်",
+            },
+            {
+              option: "2",
+              japanese: "非現実的",
+              reading: "ひげんじつてき",
+              meaning_burmese: "လက်တွေ့မကျသော",
+              usage_burmese: "ယုံရန်ခက်သော စကား",
+              example_sentence: "非現実的《ひげんじつてき》な話《はなし》だ。",
+              example_burmese: "လက်တွေ့မကျသော စကား။",
+              sentence_burmese: "",
+              why_wrong_burmese: "",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const legacy = result.questions[0]?.options_table[0];
+  assert.equal(legacy?.usage_burmese, "အစီအစဉ်ကို လက်တွေ့ကျသည်ဟု ပြောသည့်အခါ သုံးသည်။");
+  assert.match(legacy?.example_sentence ?? "", /現実的/);
+  assert.equal(result.questions[0]?.options_table[1]?.example_sentence, "非現実的《ひげんじつてき》な話《はなし》だ。");
 });
 
 test("backfills option reading from question reading for the correct choice", () => {
