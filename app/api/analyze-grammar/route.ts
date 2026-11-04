@@ -1,21 +1,21 @@
 import {
-  callGrammarGenerateContent,
+  analyzeGrammarExamPaper,
   cleanImageBase64,
   grammarGeminiModelChain,
   GRAMMAR_MAX_TEXT_CHARS,
   isGeminiAuthError,
   isGeminiBillingError,
   isNetworkOrTimeoutError,
-  isStructuredOutputError,
   normalizeGrammarTextInput,
   normalizeImageMimeType,
-  questionsFromGrammarGemini,
   shouldTryNextGrammarModel,
 } from "@/lib/gemini-grammar";
 import type { GrammarQuestion } from "@/src/constants/grammarPrompt";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Allow rich grammar options_table generation (matches JLPT headroom). */
+export const maxDuration = 300;
 
 /** Reject oversized uploads; client compresses grammar photos well under this. */
 const MAX_BASE64_CHARS = 1_200_000;
@@ -188,84 +188,81 @@ export async function POST(request: Request) {
   let lastMessage = "Gemini did not respond. Check the key and try again.";
 
   for (const modelName of models) {
-    for (const structured of [true, false]) {
-      const result = await callGrammarGenerateContent({
-        apiKey: key,
+    const result = await analyzeGrammarExamPaper({
+      apiKey: key,
+      model: modelName,
+      ...(parsed.input.kind === "text"
+        ? { textInput: parsed.input.textInput }
+        : { imageBase64: parsed.input.imageBase64, mimeType: parsed.input.mimeType }),
+    });
+
+    if (!result.ok) {
+      lastMessage = result.error;
+      console.error("[Gemini Grammar] attempt failed", {
         model: modelName,
-        structured,
-        ...(parsed.input.kind === "text"
-          ? { textInput: parsed.input.textInput }
-          : { imageBase64: parsed.input.imageBase64, mimeType: parsed.input.mimeType }),
+        kind: result.kind,
+        message: safeMessage(result.error),
       });
 
-      if (!result.ok) {
-        lastMessage = result.error;
-        console.error("[Gemini Grammar] attempt failed", {
-          model: modelName,
-          structured,
-          kind: result.kind,
-          message: safeMessage(result.error),
-        });
-
-        if (result.kind === "auth" || isGeminiAuthError(result.error)) {
-          return json(
-            {
-              ok: false,
-              error:
-                "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
-            },
-            502,
-          );
-        }
-        if (result.kind === "billing" || isGeminiBillingError(result.error)) {
-          return json(
-            {
-              ok: false,
-              error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
-            },
-            502,
-          );
-        }
-        if (result.kind === "timeout" || result.kind === "network" || isNetworkOrTimeoutError(result.error)) {
-          break;
-        }
-        if (structured && (result.kind === "parse" || isStructuredOutputError(result.error))) {
-          continue;
-        }
-        if (shouldTryNextGrammarModel(result.error)) {
-          break;
-        }
+      if (result.kind === "auth" || isGeminiAuthError(result.error)) {
         return json(
-          { ok: false, error: `Gemini could not analyze the grammar page. ${safeMessage(result.error)}` },
+          {
+            ok: false,
+            error:
+              "The Gemini API key was rejected. Check GEMINI_API_KEY in .env.local, then restart the dev server.",
+          },
           502,
         );
       }
-
-      const parsedQuestions = questionsFromGrammarGemini(result.payload);
-      const success: GrammarAnalyzeSuccess = {
-        ok: true,
-        source: "gemini",
-        message: parsedQuestions.questions.length
-          ? `Extracted ${parsedQuestions.questions.length} grammar question${parsedQuestions.questions.length === 1 ? "" : "s"}.`
-          : parsed.input.kind === "text"
-            ? "The text was read, but no grammar questions were found."
-            : "The photo was read, but no grammar questions were found.",
-        questions: parsedQuestions.questions,
-        rawText: parsedQuestions.rawText || result.rawText,
-      };
-      return json(success);
+      if (result.kind === "billing" || isGeminiBillingError(result.error)) {
+        return json(
+          {
+            ok: false,
+            error: "This Gemini key has no credits left. Add billing in Google AI Studio, then try again.",
+          },
+          502,
+        );
+      }
+      if (result.kind === "timeout" || result.kind === "network" || isNetworkOrTimeoutError(result.error)) {
+        continue;
+      }
+      if (shouldTryNextGrammarModel(result.error)) {
+        continue;
+      }
+      return json(
+        { ok: false, error: `Gemini could not analyze the grammar page. ${safeMessage(result.error)}` },
+        502,
+      );
     }
+
+    const success: GrammarAnalyzeSuccess = {
+      ok: true,
+      source: "gemini",
+      message: result.questions.length
+        ? `Extracted ${result.questions.length} grammar question${result.questions.length === 1 ? "" : "s"}.`
+        : parsed.input.kind === "text"
+          ? "The text was read, but no grammar questions were found."
+          : "The photo was read, but no grammar questions were found.",
+      questions: result.questions,
+      rawText: result.rawText,
+    };
+    return json(success);
   }
 
-  const networkish = isNetworkOrTimeoutError(lastMessage);
+  const timedOut = /abort|timed out|timeout/i.test(lastMessage);
+  const networkish = timedOut || isNetworkOrTimeoutError(lastMessage);
   return json(
     {
       ok: false,
-      error: networkish
-        ? safeMessage(lastMessage)
-        : shouldTryNextGrammarModel(lastMessage)
-          ? "Gemini is busy right now. Try again in a moment."
-          : `Gemini could not analyze the grammar page. ${safeMessage(lastMessage)}`,
+      error: timedOut
+        ? safeMessage(lastMessage).includes("timed out")
+          ? safeMessage(lastMessage)
+          : "Gemini timed out on this grammar page. Try a clearer crop or fewer questions, then retry."
+        : networkish
+          ? safeMessage(lastMessage)
+          : shouldTryNextGrammarModel(lastMessage)
+            ? "Gemini is busy right now. Try again in a moment."
+            : `Gemini could not analyze the grammar page. ${safeMessage(lastMessage)}`,
     },
     503,
   );

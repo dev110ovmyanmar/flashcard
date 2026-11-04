@@ -129,3 +129,21 @@ export async function setAnalysisCache<T>(
     /* storage unavailable */
   }
 }
+
+/** Remove every analysis cache entry (and index). Returns how many payloads were deleted. */
+export function clearAnalysisCache(): number {
+  if (typeof window === "undefined") return 0;
+  const toRemove: string[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(PREFIX)) toRemove.push(key);
+    }
+    for (const key of toRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    return 0;
+  }
+  return toRemove.filter((key) => key !== INDEX_KEY).length;
+}

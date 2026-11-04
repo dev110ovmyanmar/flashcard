@@ -636,7 +636,7 @@ export function isGeminiBillingError(message: string): boolean {
 }
 
 export function isNetworkOrTimeoutError(message: string): boolean {
-  return /fetch failed|timed out|timeout|network error|enotfound|econnrefused|econnreset|dns|vpn|firewall/i.test(
+  return /fetch failed|timed out|timeout|aborted|abort|network error|enotfound|econnrefused|econnreset|dns|vpn|firewall/i.test(
     message,
   );
 }

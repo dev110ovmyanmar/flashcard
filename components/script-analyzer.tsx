@@ -1,24 +1,15 @@
 "use client";
 
-import {
-  BookmarkPlus,
-  Camera,
-  ImagePlus,
-  Library,
-  Loader2,
-  ScrollText,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { BookmarkPlus, Library, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
+import { AnalyzerInputPanel } from "@/components/analyzer-input-panel";
 import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { AnalyzerPageHeader } from "@/components/analyzer-page-header";
 import { GoiDrawer } from "@/components/goi-drawer";
 import { ScriptGrammarCard } from "@/components/script-grammar-card";
 import { ScriptVocabCard } from "@/components/script-vocab-card";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useDecks } from "@/hooks/use-decks";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestScriptAnalyze, requestScriptAnalyzeImage } from "@/lib/client-script";
@@ -34,23 +25,6 @@ type PreparedScriptImage = { base64: string; previewUrl: string };
 
 const PAGE_TITLE = "Script";
 const MAX_SCRIPT_CHARS = 28_000;
-
-const surface =
-  "rounded-xl border border-border/60 bg-card/90 shadow-xs ring-1 ring-black/[0.02] backdrop-blur-sm dark:border-border/50 dark:ring-white/[0.03]";
-
-const btnAnalyze =
-  [
-    "inline-flex h-11 min-h-11 w-full items-center justify-center gap-2 rounded-xl px-5",
-    "border border-primary/30 bg-primary text-sm font-semibold tracking-tight text-primary-foreground",
-    "shadow-[0_1px_2px_color-mix(in_oklab,var(--foreground)_12%,transparent),0_6px_16px_-8px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
-    "transition-all duration-200",
-    "hover:bg-primary/92 hover:shadow-[0_2px_4px_color-mix(in_oklab,var(--foreground)_10%,transparent),0_10px_22px_-10px_color-mix(in_oklab,var(--primary)_60%,transparent)]",
-    "active:translate-y-px active:scale-[0.985] active:shadow-none",
-    "disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none",
-    "focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/45",
-    "sm:w-auto sm:min-w-[8.5rem]",
-    "[&_svg:not([class*='size-'])]:size-4",
-  ].join(" ");
 
 const btnSaveIcon =
   [
@@ -74,20 +48,8 @@ const btnViewGoi =
     "[&_svg:not([class*='size-'])]:size-3.5",
   ].join(" ");
 
-const btnGhost =
-  "h-9 gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/70 hover:text-foreground active:scale-[0.98] dark:hover:bg-white/[0.06] [&_svg:not([class*='size-'])]:size-3.5";
-
-const btnOutline =
-  "h-9 gap-1.5 rounded-lg border border-border/70 bg-background/50 px-3 text-xs font-medium text-muted-foreground shadow-none transition-all duration-200 hover:border-border hover:bg-muted/50 hover:text-foreground active:scale-[0.98] dark:border-white/10 dark:hover:bg-white/[0.05] [&_svg:not([class*='size-'])]:size-3.5";
-
 const tabBtn =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/45";
-
-function isImageFile(file: File): boolean {
-  const type = file.type.trim().toLowerCase();
-  if (type.startsWith("image/")) return true;
-  return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(file.name);
-}
 
 export function ScriptAnalyzer() {
   const { addDeck, decks, ready } = useDecks();
@@ -95,6 +57,7 @@ export function ScriptAnalyzer() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [inputMode, setInputMode] = useState<AnalyzerInputMode>("image");
   const [dragging, setDragging] = useState(false);
   const [scriptText, setScriptText] = useState("");
   const [prepared, setPrepared] = useState<PreparedScriptImage | null>(null);
@@ -117,18 +80,32 @@ export function ScriptAnalyzer() {
     setError(null);
     setVocabulary([]);
     setGrammar([]);
+    setScriptText("");
+    setInputMode("image");
 
     try {
-      if (!isImageFile(next)) {
-        throw new Error("Upload a photo (PNG, JPG, or WebP). Paste text works too.");
-      }
       const nextPrepared = await fileToJpegBase64ForJlpt(next);
       setPrepared(nextPrepared);
-      setScriptText("");
     } catch (caught) {
       setPrepared(null);
-      setError(caught instanceof Error ? caught.message : "This file couldn't be opened.");
+      setError(caught instanceof Error ? caught.message : "This photo couldn't be opened.");
     }
+  }
+
+  function switchMode(next: AnalyzerInputMode) {
+    if (next === inputMode) return;
+    abortRef.current?.abort();
+    setAnalyzing(false);
+    setError(null);
+    setVocabulary([]);
+    setGrammar([]);
+    setDragging(false);
+    if (next === "image") {
+      setScriptText("");
+    } else {
+      setPrepared(null);
+    }
+    setInputMode(next);
   }
 
   function clearSelection() {
@@ -144,7 +121,10 @@ export function ScriptAnalyzer() {
 
   async function analyze() {
     const trimmed = scriptText.trim();
-    if ((!trimmed && !prepared) || analyzing) return;
+    const usingText = inputMode === "text";
+    if (usingText ? !trimmed : !prepared) return;
+    if (analyzing) return;
+
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -153,9 +133,9 @@ export function ScriptAnalyzer() {
     setGrammar([]);
     setAnalyzing(true);
     try {
-      const result = prepared
-        ? await requestScriptAnalyzeImage(prepared.base64, "image/jpeg", controller.signal)
-        : await requestScriptAnalyze(trimmed, controller.signal);
+      const result = usingText
+        ? await requestScriptAnalyze(trimmed, controller.signal)
+        : await requestScriptAnalyzeImage(prepared!.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
       setVocabulary(result.vocabulary);
       setGrammar(result.grammar);
@@ -229,8 +209,12 @@ export function ScriptAnalyzer() {
   }
 
   const hasResults = vocabulary.length > 0 || grammar.length > 0;
-  const canAnalyze = Boolean(prepared) || scriptText.trim().length > 0;
-  const hasInput = canAnalyze;
+  const canAnalyze = inputMode === "text" ? scriptText.trim().length > 0 : Boolean(prepared);
+  const resultCount = tab === "vocabulary" ? vocabulary.length : grammar.length;
+  const resultLabel =
+    tab === "vocabulary"
+      ? `${resultCount} word${resultCount === 1 ? "" : "s"}`
+      : `${resultCount} pattern${resultCount === 1 ? "" : "s"}`;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -239,132 +223,44 @@ export function ScriptAnalyzer() {
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-6 sm:space-y-5 sm:px-6 sm:pt-7 sm:pb-8">
         <GeminiKeyNotice />
 
-        <section
-          className={[
-            surface,
-            "overflow-hidden transition-all duration-200",
-            dragging ? "border-primary/40 bg-primary/[0.06] shadow-sm" : "",
-          ].join(" ")}
-        >
-          <div
-            className={[
-              "px-4 py-5 text-center transition-colors duration-200 sm:px-5 sm:py-5",
-              hasInput ? "bg-muted/20" : "border-b border-dashed border-border/50",
-            ].join(" ")}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setDragging(false);
-              void takeFile(event.dataTransfer.files?.[0] ?? null);
-            }}
-          >
-            {prepared ? (
-              // Local preview of a compressed photo the user just chose.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={prepared.previewUrl}
-                alt="Selected script page"
-                className="mx-auto max-h-44 w-full rounded-lg border border-border/50 object-contain sm:max-h-52"
-              />
-            ) : scriptText.trim() ? (
-              <div className="text-left">
-                <label className="sr-only" htmlFor="script-analyzer-input">
-                  Japanese listening script
-                </label>
-                <Textarea
-                  id="script-analyzer-input"
-                  value={scriptText}
-                  disabled={analyzing}
-                  placeholder="男：すみません、駅までの行き方を教えていただけますか。"
-                  className="min-h-40 rounded-xl border-border/60 bg-background/80 px-3.5 py-3 text-left text-sm leading-6 shadow-none focus-visible:ring-ring/40 sm:min-h-48"
-                  onChange={(event) => {
-                    setScriptText(event.target.value.slice(0, MAX_SCRIPT_CHARS));
-                    setPrepared(null);
-                    setError(null);
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center py-1 sm:py-2">
-                <div className="grid size-11 place-items-center rounded-xl border border-border/60 bg-background text-primary transition-transform duration-200">
-                  <ScrollText className="size-5" />
-                </div>
-                <p className="mt-3 text-sm font-medium tracking-tight text-foreground">
-                  Drop a script photo here
-                </p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  PNG, JPG, or WebP · or paste text below
-                </p>
-                <label className="sr-only" htmlFor="script-analyzer-input">
-                  Japanese listening script
-                </label>
-                <Textarea
-                  id="script-analyzer-input"
-                  value={scriptText}
-                  disabled={analyzing}
-                  placeholder="Or paste Japanese script text…"
-                  className="mt-4 min-h-28 rounded-xl border-border/60 bg-background/80 px-3.5 py-3 text-left text-sm leading-6 shadow-none focus-visible:ring-ring/40"
-                  onChange={(event) => {
-                    setScriptText(event.target.value.slice(0, MAX_SCRIPT_CHARS));
-                    setPrepared(null);
-                    setError(null);
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-border/50 px-3 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                className={btnOutline}
-                disabled={analyzing}
-                onClick={() => imageRef.current?.click()}
-              >
-                <ImagePlus />
-                Choose photo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={btnOutline}
-                disabled={analyzing}
-                onClick={() => cameraRef.current?.click()}
-              >
-                <Camera />
-                Camera
-              </Button>
-              {hasInput ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={btnGhost}
-                  disabled={analyzing}
-                  onClick={clearSelection}
-                >
-                  <X />
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-
-            <button
-              type="button"
-              className={btnAnalyze}
-              disabled={!canAnalyze || analyzing || geminiReady !== true}
-              onClick={() => void analyze()}
-            >
-              {analyzing ? <Loader2 className="animate-spin" aria-hidden /> : <Sparkles aria-hidden />}
-              <span>{analyzing ? "Analyzing…" : "Analyze"}</span>
-            </button>
-          </div>
-        </section>
+        <AnalyzerInputPanel
+          mode={inputMode}
+          onModeChange={switchMode}
+          analyzing={analyzing}
+          canAnalyze={canAnalyze}
+          geminiReady={geminiReady === true}
+          dragging={dragging}
+          prepared={prepared}
+          textInput={scriptText}
+          maxTextChars={MAX_SCRIPT_CHARS}
+          imageHint="PNG, JPG, or WebP · Listening script"
+          imageAlt="Selected script page"
+          textTitle="Paste or type script text"
+          textHint="Listening script dialogue / narration"
+          textPlaceholder={"男：すみません、駅までの行き方を教えていただけますか。\n女：はい。この道をまっすぐ行って、二つ目の信号を右に曲がってください。"}
+          textareaId="script-analyzer-input"
+          onTextChange={(value) => {
+            setScriptText(value);
+            setPrepared(null);
+            setError(null);
+            setVocabulary([]);
+            setGrammar([]);
+          }}
+          onPickFile={() => imageRef.current?.click()}
+          onPickCamera={() => cameraRef.current?.click()}
+          onClear={clearSelection}
+          onAnalyze={() => void analyze()}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            void takeFile(event.dataTransfer.files?.[0] ?? null);
+          }}
+        />
 
         {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 
@@ -396,27 +292,37 @@ export function ScriptAnalyzer() {
 
         {hasResults ? (
           <section className="space-y-3 sm:space-y-4">
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className={btnViewGoi}
-                onClick={() => setGoiOpen(true)}
-                aria-label="View saved Goi flashcards"
-                title="View saved Goi"
-              >
-                <Library aria-hidden />
-                <span>View Goi</span>
-              </button>
-              <button
-                type="button"
-                className={btnSaveIcon}
-                disabled={!ready || saving}
-                onClick={saveCurrentTab}
-                aria-label={saving ? "Saving flashcards" : "Save tab to flashcards"}
-                title={tab === "vocabulary" ? "Save vocabulary to flashcards" : "Save grammar to flashcards"}
-              >
-                {saving ? <Loader2 className="animate-spin" aria-hidden /> : <BookmarkPlus aria-hidden />}
-              </button>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                  Results
+                </p>
+                <h2 className="mt-0.5 text-base font-semibold tracking-tight text-foreground">
+                  {resultLabel}
+                </h2>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className={btnViewGoi}
+                  onClick={() => setGoiOpen(true)}
+                  aria-label="View saved Goi flashcards"
+                  title="View saved Goi"
+                >
+                  <Library aria-hidden />
+                  <span>View Goi</span>
+                </button>
+                <button
+                  type="button"
+                  className={btnSaveIcon}
+                  disabled={!ready || saving}
+                  onClick={saveCurrentTab}
+                  aria-label={saving ? "Saving flashcards" : "Save tab to flashcards"}
+                  title={tab === "vocabulary" ? "Save vocabulary to flashcards" : "Save grammar to flashcards"}
+                >
+                  {saving ? <Loader2 className="animate-spin" aria-hidden /> : <BookmarkPlus aria-hidden />}
+                </button>
+              </div>
             </div>
 
             <div
