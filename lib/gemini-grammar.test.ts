@@ -435,6 +435,8 @@ describe("mergeGrammarQuestions", () => {
       questionNumber: "1",
       questionText: "A",
       correctAnswer: "1",
+      correct_order: "",
+      assembled_sentence: "",
       grammarPattern: "～ことだ",
       grammar_meaning_burmese: "",
       options_table: [],
