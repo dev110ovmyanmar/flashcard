@@ -34,6 +34,14 @@ const MAX_SCRIPT_CHARS = 28_000;
 export const SCRIPT_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
+    script_text: {
+      type: Type.STRING,
+      description: "Full Japanese script / dialogue with speaker labels; 漢字《ひらがな》 when useful",
+    },
+    translation_burmese: {
+      type: Type.STRING,
+      description: "Full natural Burmese translation of the entire conversation / narration",
+    },
     vocabulary: {
       type: Type.ARRAY,
       items: {
@@ -90,7 +98,7 @@ export const SCRIPT_RESPONSE_SCHEMA: Schema = {
     },
     page_kind: { type: Type.STRING },
   },
-  required: ["vocabulary", "grammar", "page_kind"],
+  required: ["script_text", "translation_burmese", "vocabulary", "grammar", "page_kind"],
 };
 
 export type ScriptGeminiCallResult =
@@ -156,7 +164,7 @@ export async function callScriptGenerateContent(options: {
 
   if (imageBase64) {
     parts.push({
-      text: "次の画像は日本語の聴解スクリプト／学習テキストです。画像を読み取り、スクリプト内の vocabulary と grammar をすべてJSONで返してください。一部だけに絞らないでください。",
+      text: "次の画像は日本語の聴解スクリプト／学習テキストです。画像を読み取り、script_text（全文）・translation_burmese（全文ビルマ語訳）・vocabulary・grammar をすべてJSONで返してください。会話は途中で切らず、一部だけに絞らないでください。",
     });
     parts.push({
       inlineData: {
@@ -168,7 +176,7 @@ export async function callScriptGenerateContent(options: {
 
   if (scriptText) {
     parts.push({
-      text: `次の日本語スクリプトを分析し、vocabulary と grammar をすべてJSONで返してください。スクリプト内の語彙・文法はできるだけすべて列挙し、一部だけに絞らないでください。\n\n---\n${scriptText}\n---`,
+      text: `次の日本語スクリプトを分析し、script_text・translation_burmese・vocabulary・grammar をすべてJSONで返してください。script_text は入力本文を話者ラベル付きで整え、translation_burmese は会話全体の自然なビルマ語全文訳です。語彙・文法はできるだけすべて列挙し、一部だけに絞らないでください。\n\n---\n${scriptText}\n---`,
     });
   }
 
@@ -206,6 +214,8 @@ export async function callScriptGenerateContent(options: {
     return {
       ok: true,
       payload: {
+        script_text: parsed.script_text,
+        translation_burmese: parsed.translation_burmese,
         vocabulary: parsed.vocabulary,
         grammar: parsed.grammar,
         ...(pageKind ? { page_kind: pageKind } : {}),
@@ -226,6 +236,8 @@ export async function callScriptGenerateContent(options: {
 }
 
 export function payloadFromScriptGemini(payload: unknown): {
+  script_text: string;
+  translation_burmese: string;
   vocabulary: ScriptVocabItem[];
   grammar: ScriptGrammarItem[];
   rawText: string;
@@ -235,25 +247,49 @@ export function payloadFromScriptGemini(payload: unknown): {
     const parsed = parseModelJson(payload);
     if (!parsed) {
       return {
+        script_text: "",
+        translation_burmese: "",
         vocabulary: [],
         grammar: [],
         rawText: payload,
         error: "Gemini returned JSON that could not be parsed.",
       };
     }
-    return { vocabulary: parsed.vocabulary, grammar: parsed.grammar, rawText: payload };
+    return {
+      script_text: parsed.script_text,
+      translation_burmese: parsed.translation_burmese,
+      vocabulary: parsed.vocabulary,
+      grammar: parsed.grammar,
+      rawText: payload,
+    };
   }
 
   if (!isRecord(payload)) {
-    return { vocabulary: [], grammar: [], rawText: "", error: "Gemini returned an empty response." };
+    return {
+      script_text: "",
+      translation_burmese: "",
+      vocabulary: [],
+      grammar: [],
+      rawText: "",
+      error: "Gemini returned an empty response.",
+    };
   }
   if (isRecord(payload.error) && typeof payload.error.message === "string") {
-    return { vocabulary: [], grammar: [], rawText: "", error: payload.error.message };
+    return {
+      script_text: "",
+      translation_burmese: "",
+      vocabulary: [],
+      grammar: [],
+      rawText: "",
+      error: payload.error.message,
+    };
   }
 
   const normalizedObject = normalizeScriptValue(payload);
   if (normalizedObject) {
     return {
+      script_text: normalizedObject.script_text,
+      translation_burmese: normalizedObject.translation_burmese,
       vocabulary: normalizedObject.vocabulary,
       grammar: normalizedObject.grammar,
       rawText: safeJson(payload),
@@ -262,12 +298,21 @@ export function payloadFromScriptGemini(payload: unknown): {
 
   const text = extractText(payload);
   if (!text) {
-    return { vocabulary: [], grammar: [], rawText: "", error: "Gemini returned no text for this script." };
+    return {
+      script_text: "",
+      translation_burmese: "",
+      vocabulary: [],
+      grammar: [],
+      rawText: "",
+      error: "Gemini returned no text for this script.",
+    };
   }
 
   const parsed = parseModelJson(text);
   if (!parsed) {
     return {
+      script_text: "",
+      translation_burmese: "",
       vocabulary: [],
       grammar: [],
       rawText: text,
@@ -275,7 +320,13 @@ export function payloadFromScriptGemini(payload: unknown): {
     };
   }
 
-  return { vocabulary: parsed.vocabulary, grammar: parsed.grammar, rawText: text };
+  return {
+    script_text: parsed.script_text,
+    translation_burmese: parsed.translation_burmese,
+    vocabulary: parsed.vocabulary,
+    grammar: parsed.grammar,
+    rawText: text,
+  };
 }
 
 export function shouldTryNextScriptModel(message: string): boolean {
@@ -305,7 +356,12 @@ function parseModelJson(text: string): ScriptAnalyzePayload | null {
 
 function extractScriptPageKind(
   rawText: string,
-  parsed: { vocabulary: ScriptVocabItem[]; grammar: ScriptGrammarItem[] },
+  parsed: {
+    script_text: string;
+    translation_burmese: string;
+    vocabulary: ScriptVocabItem[];
+    grammar: ScriptGrammarItem[];
+  },
 ): ScriptAnalyzePayload["page_kind"] | undefined {
   try {
     const start = rawText.search(/[{[]/);
@@ -331,14 +387,27 @@ function normalizeScriptValue(value: unknown): ScriptAnalyzePayload | null {
   const vocabList = vocabArray(value);
   const grammarList = grammarArray(value);
   const record = isRecord(value) ? value : null;
+  const script_text = asString(
+    record?.script_text ?? record?.scriptText ?? record?.dialogue ?? record?.text,
+  );
+  const translation_burmese = stripForeignGlosses(
+    asString(
+      record?.translation_burmese ??
+        record?.translationBurmese ??
+        record?.full_translation_burmese ??
+        record?.conversation_burmese,
+    ),
+  );
   const page_kindRaw = record?.page_kind ?? record?.pageKind;
   const page_kind =
     typeof page_kindRaw === "string"
       ? (page_kindRaw as ScriptAnalyzePayload["page_kind"])
       : undefined;
 
-  if (!vocabList && !grammarList) {
-    if (page_kind) return { vocabulary: [], grammar: [], page_kind };
+  if (!vocabList && !grammarList && !script_text && !translation_burmese) {
+    if (page_kind) {
+      return { script_text: "", translation_burmese: "", vocabulary: [], grammar: [], page_kind };
+    }
     return null;
   }
 
@@ -355,6 +424,8 @@ function normalizeScriptValue(value: unknown): ScriptAnalyzePayload | null {
   }
 
   return {
+    script_text,
+    translation_burmese,
     vocabulary,
     grammar,
     ...(page_kind ? { page_kind } : {}),

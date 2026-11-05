@@ -1,6 +1,6 @@
 "use client";
 
-import { BookmarkPlus, Library, Loader2 } from "lucide-react";
+import { BookmarkPlus, Library, Loader2, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { AnalyzerInputMode } from "@/components/analyzer-input-mode";
@@ -8,8 +8,10 @@ import { AnalyzerInputPanel } from "@/components/analyzer-input-panel";
 import { AnalysisSkeleton } from "@/components/analysis-skeleton";
 import { AnalyzerPageHeader } from "@/components/analyzer-page-header";
 import { GoiDrawer } from "@/components/goi-drawer";
+import { ScriptContentCard } from "@/components/script-content-card";
 import { ScriptGrammarCard } from "@/components/script-grammar-card";
 import { ScriptVocabCard } from "@/components/script-vocab-card";
+import { Button } from "@/components/ui/button";
 import { useDecks } from "@/hooks/use-decks";
 import { GeminiKeyNotice, useGeminiStatus } from "@/hooks/use-gemini-status";
 import { requestScriptAnalyze, requestScriptAnalyzeImage } from "@/lib/client-script";
@@ -67,6 +69,8 @@ export function ScriptAnalyzer() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [goiOpen, setGoiOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [extractedScript, setExtractedScript] = useState("");
+  const [translationBurmese, setTranslationBurmese] = useState("");
   const [vocabulary, setVocabulary] = useState<ScriptVocabItem[]>([]);
   const [grammar, setGrammar] = useState<ScriptGrammarItem[]>([]);
   const [tab, setTab] = useState<ResultTab>("vocabulary");
@@ -76,11 +80,17 @@ export function ScriptAnalyzer() {
     return () => abortRef.current?.abort();
   }, []);
 
+  function clearResults() {
+    setExtractedScript("");
+    setTranslationBurmese("");
+    setVocabulary([]);
+    setGrammar([]);
+  }
+
   async function takeFile(next: File | null) {
     if (!next) return;
     setError(null);
-    setVocabulary([]);
-    setGrammar([]);
+    clearResults();
     setScriptText("");
     setInputMode("image");
 
@@ -98,8 +108,7 @@ export function ScriptAnalyzer() {
     abortRef.current?.abort();
     setAnalyzing(false);
     setError(null);
-    setVocabulary([]);
-    setGrammar([]);
+    clearResults();
     setDragging(false);
     if (next === "image") {
       setScriptText("");
@@ -115,9 +124,12 @@ export function ScriptAnalyzer() {
     setPrepared(null);
     setAnalyzing(false);
     setError(null);
-    setVocabulary([]);
-    setGrammar([]);
+    clearResults();
     setDragging(false);
+  }
+
+  function startNewAnalysis() {
+    clearSelection();
   }
 
   async function analyze() {
@@ -130,22 +142,22 @@ export function ScriptAnalyzer() {
     const controller = new AbortController();
     abortRef.current = controller;
     setError(null);
-    setVocabulary([]);
-    setGrammar([]);
+    clearResults();
     setAnalyzing(true);
     try {
       const result = usingText
         ? await requestScriptAnalyze(trimmed, controller.signal)
         : await requestScriptAnalyzeImage(prepared!.base64, "image/jpeg", controller.signal);
       if (controller.signal.aborted) return;
+      setExtractedScript(result.script_text.trim() || (usingText ? trimmed : ""));
+      setTranslationBurmese(result.translation_burmese);
       setVocabulary(result.vocabulary);
       setGrammar(result.grammar);
       setTab(result.vocabulary.length > 0 || result.grammar.length === 0 ? "vocabulary" : "grammar");
       if (result.source === "cache") toast.message(UI.results.cacheLoaded);
     } catch (caught) {
       if (controller.signal.aborted || (caught instanceof DOMException && caught.name === "AbortError")) return;
-      setVocabulary([]);
-      setGrammar([]);
+      clearResults();
       setError(caught instanceof Error ? caught.message : "The script couldn't be analyzed.");
     } finally {
       if (!controller.signal.aborted) setAnalyzing(false);
@@ -209,7 +221,12 @@ export function ScriptAnalyzer() {
     }
   }
 
-  const hasResults = vocabulary.length > 0 || grammar.length > 0;
+  const hasResults =
+    extractedScript.length > 0 ||
+    translationBurmese.length > 0 ||
+    vocabulary.length > 0 ||
+    grammar.length > 0;
+  const showInput = !hasResults;
   const canAnalyze = inputMode === "text" ? scriptText.trim().length > 0 : Boolean(prepared);
   const resultCount = tab === "vocabulary" ? vocabulary.length : grammar.length;
   const resultLabel =
@@ -224,44 +241,45 @@ export function ScriptAnalyzer() {
       <main className="mx-auto w-full max-w-4xl space-y-4 px-4 pt-5 pb-6 sm:space-y-5 sm:px-6 sm:pt-7 sm:pb-8">
         <GeminiKeyNotice />
 
-        <AnalyzerInputPanel
-          mode={inputMode}
-          onModeChange={switchMode}
-          analyzing={analyzing}
-          canAnalyze={canAnalyze}
-          geminiReady={geminiReady === true}
-          dragging={dragging}
-          prepared={prepared}
-          textInput={scriptText}
-          maxTextChars={MAX_SCRIPT_CHARS}
-          imageHint={UI.hints.scriptImage}
-          imageAlt={UI.hints.scriptImageAlt}
-          textTitle={UI.hints.scriptTextTitle}
-          textHint={UI.hints.scriptTextHint}
-          textPlaceholder={"男：すみません、駅までの行き方を教えていただけますか。\n女：はい。この道をまっすぐ行って、二つ目の信号を右に曲がってください。"}
-          textareaId="script-analyzer-input"
-          onTextChange={(value) => {
-            setScriptText(value);
-            setPrepared(null);
-            setError(null);
-            setVocabulary([]);
-            setGrammar([]);
-          }}
-          onPickFile={() => imageRef.current?.click()}
-          onPickCamera={() => cameraRef.current?.click()}
-          onClear={clearSelection}
-          onAnalyze={() => void analyze()}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault();
-            setDragging(false);
-            void takeFile(event.dataTransfer.files?.[0] ?? null);
-          }}
-        />
+        {showInput ? (
+          <AnalyzerInputPanel
+            mode={inputMode}
+            onModeChange={switchMode}
+            analyzing={analyzing}
+            canAnalyze={canAnalyze}
+            geminiReady={geminiReady === true}
+            dragging={dragging}
+            prepared={prepared}
+            textInput={scriptText}
+            maxTextChars={MAX_SCRIPT_CHARS}
+            imageHint={UI.hints.scriptImage}
+            imageAlt={UI.hints.scriptImageAlt}
+            textTitle={UI.hints.scriptTextTitle}
+            textHint={UI.hints.scriptTextHint}
+            textPlaceholder={"男：すみません、駅までの行き方を教えていただけますか。\n女：はい。この道をまっすぐ行って、二つ目の信号を右に曲がってください。"}
+            textareaId="script-analyzer-input"
+            onTextChange={(value) => {
+              setScriptText(value);
+              setPrepared(null);
+              setError(null);
+              clearResults();
+            }}
+            onPickFile={() => imageRef.current?.click()}
+            onPickCamera={() => cameraRef.current?.click()}
+            onClear={clearSelection}
+            onAnalyze={() => void analyze()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              void takeFile(event.dataTransfer.files?.[0] ?? null);
+            }}
+          />
+        ) : null}
 
         {error ? <p className="text-sm leading-6 text-destructive">{error}</p> : null}
 
@@ -303,6 +321,16 @@ export function ScriptAnalyzer() {
                 </h2>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-lg px-2.5 text-xs font-medium"
+                  onClick={startNewAnalysis}
+                >
+                  <Plus className="size-3.5" aria-hidden />
+                  {UI.results.new}
+                </Button>
                 <button
                   type="button"
                   className={btnViewGoi}
@@ -325,6 +353,11 @@ export function ScriptAnalyzer() {
                 </button>
               </div>
             </div>
+
+            <ScriptContentCard
+              scriptText={extractedScript}
+              translationBurmese={translationBurmese}
+            />
 
             <div
               role="tablist"

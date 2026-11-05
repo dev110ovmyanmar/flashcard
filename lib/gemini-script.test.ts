@@ -8,6 +8,8 @@ import {
 } from "./gemini-script";
 
 const SAMPLE = {
+  script_text: "男：忘《わす》れてしまった。\n女：大丈夫《だいじょうぶ》ですよ。",
+  translation_burmese: "ယောက်ျား: မေ့သွားမိသည်။\nမိန်းမ: အဆင်ပြေပါတယ်။",
   vocabulary: [
     {
       word: "打ち合わせ",
@@ -44,11 +46,32 @@ test("normalizes script text", () => {
 
 test("parses structured script JSON", () => {
   const parsed = payloadFromScriptGemini(JSON.stringify(SAMPLE));
+  assert.equal(parsed.script_text.includes("忘"), true);
+  assert.match(parsed.translation_burmese, /မေ့သွားမိသည်/);
   assert.equal(parsed.vocabulary.length, 1);
   assert.equal(parsed.vocabulary[0]?.word, "打ち合わせ");
   assert.equal(parsed.grammar.length, 1);
   assert.equal(parsed.grammar[0]?.reading, "てしまう");
   assert.equal(parsed.error, undefined);
+});
+
+test("defaults missing script_text and translation_burmese", () => {
+  const parsed = payloadFromScriptGemini({
+    vocabulary: [
+      {
+        word: "順調",
+        reading: "じゅんちょう",
+        meaning_burmese: "ချောမွေ့",
+        explanation_burmese: "ချောမွေ့သည်။",
+        example_sentence: "順調です。",
+        jlpt_level: "N3",
+      },
+    ],
+    grammar: [],
+  });
+  assert.equal(parsed.script_text, "");
+  assert.equal(parsed.translation_burmese, "");
+  assert.equal(parsed.vocabulary[0]?.word, "順調");
 });
 
 test("accepts alternate vocabulary / grammar keys", () => {

@@ -5,6 +5,8 @@ export type ScriptAnalyzeSuccess = {
   ok: true;
   source: "gemini" | "cache";
   message: string;
+  script_text: string;
+  translation_burmese: string;
   vocabulary: ScriptVocabItem[];
   grammar: ScriptGrammarItem[];
   rawText: string;
@@ -26,6 +28,20 @@ function isSuccess(value: unknown): value is ScriptAnalyzeSuccess {
   );
 }
 
+function withScriptFields(
+  data: Omit<ScriptAnalyzeSuccess, "script_text" | "translation_burmese"> & {
+    script_text?: unknown;
+    translation_burmese?: unknown;
+  },
+): ScriptAnalyzeSuccess {
+  return {
+    ...data,
+    script_text: typeof data.script_text === "string" ? data.script_text : "",
+    translation_burmese:
+      typeof data.translation_burmese === "string" ? data.translation_burmese : "",
+  };
+}
+
 async function parseAnalyzeResponse(response: Response): Promise<ScriptAnalyzeSuccess> {
   let data: unknown = null;
   try {
@@ -42,10 +58,10 @@ async function parseAnalyzeResponse(response: Response): Promise<ScriptAnalyzeSu
     throw new Error(message);
   }
 
-  return {
+  return withScriptFields({
     ...data,
     source: "gemini",
-  };
+  });
 }
 
 export async function requestScriptAnalyze(
@@ -55,12 +71,13 @@ export async function requestScriptAnalyze(
   const material = scriptText.trim();
   const cached = await getAnalysisCache<ScriptAnalyzeSuccess>("script-text", material);
   if (cached && Array.isArray(cached.vocabulary) && Array.isArray(cached.grammar)) {
-    return {
+    return withScriptFields({
       ...cached,
       ok: true,
       source: "cache",
       message: cached.message || "Loaded from cache.",
-    };
+      script_text: cached.script_text || material,
+    });
   }
 
   const response = await fetch("/api/analyze-script", {
@@ -82,12 +99,12 @@ export async function requestScriptAnalyzeImage(
   const material = `${mimeType}:${imageBase64}`;
   const cached = await getAnalysisCache<ScriptAnalyzeSuccess>("script-image", material);
   if (cached && Array.isArray(cached.vocabulary) && Array.isArray(cached.grammar)) {
-    return {
+    return withScriptFields({
       ...cached,
       ok: true,
       source: "cache",
       message: cached.message || "Loaded from cache.",
-    };
+    });
   }
 
   const response = await fetch("/api/analyze-script", {

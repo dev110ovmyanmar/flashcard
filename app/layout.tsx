@@ -34,7 +34,8 @@ const myanmar = Noto_Sans_Myanmar({
 });
 
 export const metadata: Metadata = {
-  title: "Sumi — Japanese flashcards",
+  applicationName: "Sumi",
+  title: "Sumi",
   description:
     "Turn a scanned vocabulary page into a flip deck. Kanji on the front. Hiragana and Myanmar on the back.",
 };

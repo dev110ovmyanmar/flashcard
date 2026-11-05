@@ -28,6 +28,8 @@ export type ScriptAnalyzeSuccess = {
   ok: true;
   source: "gemini";
   message: string;
+  script_text: string;
+  translation_burmese: string;
   vocabulary: ScriptVocabItem[];
   grammar: ScriptGrammarItem[];
   rawText: string;
@@ -248,6 +250,9 @@ export async function POST(request: Request) {
 
       const vocabCount = result.payload.vocabulary.length;
       const grammarCount = result.payload.grammar.length;
+      const scriptText =
+        result.payload.script_text.trim() ||
+        (script.input.kind === "text" ? script.input.scriptText : "");
       const success: ScriptAnalyzeSuccess = {
         ok: true,
         source: "gemini",
@@ -255,6 +260,8 @@ export async function POST(request: Request) {
           vocabCount || grammarCount
             ? `Found ${vocabCount} vocab · ${grammarCount} grammar point${grammarCount === 1 ? "" : "s"}.`
             : "The text was read. No vocabulary or grammar points were found.",
+        script_text: scriptText,
+        translation_burmese: result.payload.translation_burmese,
         vocabulary: result.payload.vocabulary,
         grammar: result.payload.grammar,
         rawText: result.rawText,

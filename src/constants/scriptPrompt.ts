@@ -45,6 +45,10 @@ export type ScriptGrammarItem = {
 };
 
 export type ScriptAnalyzePayload = {
+  /** Full Japanese script / dialogue as read from the image or paste. */
+  script_text: string;
+  /** Full natural Burmese translation of the entire conversation / narration. */
+  translation_burmese: string;
   vocabulary: ScriptVocabItem[];
   grammar: ScriptGrammarItem[];
   /** Page classification for mismatch errors (not hybrid extraction). */
@@ -58,7 +62,11 @@ ${LANGUAGE_LOCK_JA}
 # 入力
 - ユーザーが貼り付け / アップロードした日本語の聴解スクリプト、学習テキスト、またはその写真・スキャン画像
 - 画像の場合はまず日本語本文を読み取り、その内容から語彙と文法を抽出する
-- 話者ラベル（男、女、A、B など）、場面メモ、英語など第三言語の注釈があれば無視して日本語本文だけを分析する
+- 話者ラベル（男、女、A、B など）は会話の一部として script_text に残す。場面メモ・英語など第三言語の注釈は無視
+
+# 本文と全文翻訳（必須）
+1. script_text: スクリプト／会話の日本語本文全体。話者ラベル付きで改行を保つ。漢字は可能なら 漢字《ひらがな》。途中で切らない
+2. translation_burmese: 会話／ナレーション全体の自然なビルマ語翻訳（話者ごと・流れどおり）。要約ではなく全文。機械翻訳調禁止
 
 # 抽出方針（網羅が最優先）
 - スクリプト本文に出てくる語彙と文法を **すべて** 返す。重要そうな一部だけに絞らない。レベルで除外しない（N5〜N1 すべて対象）
@@ -92,19 +100,21 @@ ${LANGUAGE_LOCK_JA}
 8. jlpt_level: "N1"|"N2"|"N3"|"N4"|"N5"|"" （不明なら ""）
 
 # ビルマ語 — 厳守
-- meaning_burmese / explanation_burmese / usage_burmese / nuance_burmese はビルマ語本文必須
+- translation_burmese / meaning_burmese / explanation_burmese / usage_burmese / nuance_burmese はビルマ語本文必須
 - 日本語解説禁止（語《よみ》のキーワード挿入のみ可）
-- 「ဟု ပြောနေသည်။」「ဟု ပြောသည်။」「ဟု ဆိုသည်။」禁止
+- 「ဟု ပြောနေသည်။」「ဟု ပြောသည်။」「ဟု ဆိုသည်။」禁止（translation_burmese の会話文としても使わない）
+- 「နံပါတ် ၁」「အမှတ် ၂」など番号メタ見出し禁止。会話本文だけを書く
+- ベトナム語（liệu / được 等）・他言語の混入禁止
 
 # page_kind（必須・分類のみ）
 - page_kind: "vocabulary"|"grammar"|"script"|"mixed"|"other"|"empty"
 - 聴解スクリプト／学習文なら "script"。語彙試験ページなら "vocabulary"。文法・★問題なら "grammar"
-- 試験ページ（語彙／文法）なら vocabulary と grammar は []、page_kind のみ実種別（無理に抽出しない）
+- 試験ページ（語彙／文法）なら vocabulary と grammar は []、script_text / translation_burmese も ""、page_kind のみ実種別（無理に抽出しない）
 
 # 出力形式（厳守）
 - 有効なJSONのみ。Markdown・コードフェンス・前後説明禁止
-- ルート: { "vocabulary": [ ... ], "grammar": [ ... ], "page_kind": "..." }
-- 該当がなければ空配列
+- ルート: { "script_text": "...", "translation_burmese": "...", "vocabulary": [ ... ], "grammar": [ ... ], "page_kind": "..." }
+- 該当がなければ空配列／空文字列
 
 # 出力例（短）
-{"vocabulary":[{"word":"打ち合わせ","reading":"うちあわせ","meaning_burmese":"ညှိနှိုင်းအစည်းအဝေး","example_sentence":"当日《とうじつ》のスケジュール表《ひょう》が欲《ほ》しい。","explanation_burmese":"ထိုနေ့ အချိန်ဇယားကို လိုချင်သည်။","jlpt_level":"N2"},{"word":"順調","reading":"じゅんちょう","meaning_burmese":"ချောမွေ့စွာ တိုးတက်နေသည်","example_sentence":"工事《こうじ》は順調《じゅんちょう》に進《すす》んでいます。","explanation_burmese":"အလုပ်များ ချောမွေ့စွာ တိုးတက်နေသည်။","jlpt_level":"N3"},{"word":"都合","reading":"つごう","meaning_burmese":"အဆင်ပြေမှု / အခြေအနေ","example_sentence":"都合《つごう》が悪《わる》いです。","explanation_burmese":"အဆင်မပြေပါ။","jlpt_level":"N4"}],"grammar":[{"pattern":"～ばかりか《ばかりか》","reading":"ばかりか","explanation_burmese":"…သာမက။ ထို့အပြင်။","usage_in_script":"忙しいばかりか、疲れている。","usage_burmese":"အလုပ်များသည်သာမက ပင်ပန်းလည်းသည်။","nuance_burmese":"အလေးပေးပြောသည်။","context_example":"高いばかりか、品質《ひんしつ》も悪《わる》い。","jlpt_level":"N2"},{"pattern":"～ことになっている《ことになっている》","reading":"ことになっている","explanation_burmese":"စည်းကမ်း/အစီအစဉ်အရ …ဖြစ်ရမည်။","usage_in_script":"ここで靴《くつ》を脱《ぬ》ぐことになっています。","usage_burmese":"ဤနေရာတွင် ဖိနပ်ချွတ်ရမည်ဟု သတ်မှတ်ထားသည်။","nuance_burmese":"ကိုယ်ပိုင်ဆုံးဖြတ်ချက်မဟုတ်။","context_example":"会議《かいぎ》は毎週《まいしゅう》月曜《げつよう》に行《おこな》うことになっている。","jlpt_level":"N3"},{"pattern":"～てしまう《てしまう》","reading":"てしまう","explanation_burmese":"မရည်ရွယ်ဘဲ ဖြစ်သွားသည်။","usage_in_script":"財布《さいふ》を忘《わす》れてしまった。","usage_burmese":"ပိုက်ဆံအိတ်ကို မေ့ကျန်ခဲ့မိသည်။","nuance_burmese":"နောင်တ ပါသည်။","context_example":"傘《かさ》を忘《わす》れてしまった。","jlpt_level":"N4"}],"page_kind":"script"}`;
+{"script_text":"男：すみません、駅《えき》までの行《い》き方《かた》を教《おし》えていただけますか。\\n女：はい。この道《みち》をまっすぐ行《い》って、二《ふた》つ目《め》の信号《しんごう》を右《みぎ》に曲《ま》がってください。","translation_burmese":"ယောက်ျား: တောင်းပန်ပါ၏၊ ဘူတာအထိ သွားနည်းကို ပြောပြပေးနိုင်ပါသလား။\\nမိန်းမ: ဟုတ်ကဲ့။ ဒီလမ်းကို တည့်တည့်သွားပြီး ဒုတိယ မီးပွိုင့်မှာ ညာဘက်ကွေ့ပါ။","vocabulary":[{"word":"打ち合わせ","reading":"うちあわせ","meaning_burmese":"ညှိနှိုင်းအစည်းအဝေး","example_sentence":"当日《とうじつ》のスケジュール表《ひょう》が欲《ほ》しい。","explanation_burmese":"ထိုနေ့ အချိန်ဇယားကို လိုချင်သည်။","jlpt_level":"N2"},{"word":"順調","reading":"じゅんちょう","meaning_burmese":"ချောမွေ့စွာ တိုးတက်နေသည်","example_sentence":"工事《こうじ》は順調《じゅんちょう》に進《すす》んでいます。","explanation_burmese":"အလုပ်များ ချောမွေ့စွာ တိုးတက်နေသည်။","jlpt_level":"N3"},{"word":"都合","reading":"つごう","meaning_burmese":"အဆင်ပြေမှု / အခြေအနေ","example_sentence":"都合《つごう》が悪《わる》いです。","explanation_burmese":"အဆင်မပြေပါ။","jlpt_level":"N4"}],"grammar":[{"pattern":"～ばかりか《ばかりか》","reading":"ばかりか","explanation_burmese":"…သာမက။ ထို့အပြင်။","usage_in_script":"忙しいばかりか、疲れている。","usage_burmese":"အလုပ်များသည်သာမက ပင်ပန်းလည်းသည်။","nuance_burmese":"အလေးပေးပြောသည်။","context_example":"高いばかりか、品質《ひんしつ》も悪《わる》い。","jlpt_level":"N2"},{"pattern":"～ことになっている《ことになっている》","reading":"ことになっている","explanation_burmese":"စည်းကမ်း/အစီအစဉ်အရ …ဖြစ်ရမည်။","usage_in_script":"ここで靴《くつ》を脱《ぬ》ぐことになっています。","usage_burmese":"ဤနေရာတွင် ဖိနပ်ချွတ်ရမည်ဟု သတ်မှတ်ထားသည်။","nuance_burmese":"ကိုယ်ပိုင်ဆုံးဖြတ်ချက်မဟုတ်။","context_example":"会議《かいぎ》は毎週《まいしゅう》月曜《げつよう》に行《おこな》うことになっている。","jlpt_level":"N3"},{"pattern":"～てしまう《てしまう》","reading":"てしまう","explanation_burmese":"မရည်ရွယ်ဘဲ ဖြစ်သွားသည်။","usage_in_script":"財布《さいふ》を忘《わす》れてしまった。","usage_burmese":"ပိုက်ဆံအိတ်ကို မေ့ကျန်ခဲ့မိသည်။","nuance_burmese":"နောင်တ ပါသည်။","context_example":"傘《かさ》を忘《わす》れてしまった。","jlpt_level":"N4"}],"page_kind":"script"}`;

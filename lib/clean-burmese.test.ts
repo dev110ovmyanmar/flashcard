@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { repairBrokenMyanmar, stripForeignGlosses } from "./clean-burmese";
+import {
+  repairBrokenMyanmar,
+  stripForeignGlosses,
+  stripMetaNumberLabels,
+} from "./clean-burmese";
 
 test("strips Thai and mixed Thai–Myanmar tokens like သัပတ", () => {
   // Mixed token containing Thai mai han-akat / po pla is removed as a whole word.
@@ -43,4 +47,18 @@ test("repairs word-initial kinzi garbage like င်္ဟောင်ဆော�
 
 test("repairs ဟောင်ဆောင် → ဟန်ဆောင် without kinzi", () => {
   assert.equal(repairBrokenMyanmar("သူ ဟောင်ဆောင်နေသည်။"), "သူ ဟန်ဆောင်နေသည်။");
+});
+
+test("strips meta number labels like နံပါတ် ၁", () => {
+  assert.equal(stripMetaNumberLabels("နံပါတ် ၁ ယောက်ျား: မင်္ဂလာပါ။"), "ယောက်ျား: မင်္ဂလာပါ။");
+  assert.equal(stripMetaNumberLabels("နံပါတ်၁။ မိန်းမ: ဟုတ်ကဲ့။"), "မိန်းမ: ဟုတ်ကဲ့။");
+  assert.equal(stripForeignGlosses("နံပါတ် ၂ အဆင်ပြေပါတယ်။"), "အဆင်ပြေပါတယ်။");
+  assert.equal(stripForeignGlosses("အမှတ် 3 လုပ်မည်။"), "လုပ်မည်။");
+});
+
+test("strips Vietnamese Latin tokens like liệu", () => {
+  assert.equal(stripForeignGlosses("liệu").includes("liệu"), false);
+  assert.equal(stripForeignGlosses("được / ရနိုင်သည်"), "ရနိုင်သည်");
+  assert.equal(stripForeignGlosses("မေးခွန်း liệu အဖြေ"), "မေးခွန်း အဖြေ");
+  assert.match(stripForeignGlosses("မင်္ဂလာပါ"), /မင်္ဂလာပါ/);
 });

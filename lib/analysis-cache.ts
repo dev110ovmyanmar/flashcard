@@ -1,13 +1,39 @@
 /**
  * Browser cache for Gemini analysis results.
  * Identical image/text payloads resolve from localStorage without re-calling the API.
+ * Entries are cleared day by day: only same local calendar day stays valid.
  */
 
-const PREFIX = "sumi-analysis:v1:";
+const PREFIX = "sumi-analysis:v2:";
+/** Older prefixes — wiped whenever we touch storage so nothing lingers overnight. */
+const LEGACY_PREFIXES = ["sumi-analysis:v1:"] as const;
 const INDEX_KEY = `${PREFIX}index`;
 const MAX_ENTRIES = 24;
-const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_VALUE_CHARS = 1_200_000;
+
+function sameLocalDay(a: number, b: number): boolean {
+  const left = new Date(a);
+  const right = new Date(b);
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function sweepLegacyKeys() {
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (LEGACY_PREFIXES.some((prefix) => key.startsWith(prefix))) toRemove.push(key);
+    }
+    for (const key of toRemove) localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
 
 export type AnalysisCacheKind =
   | "ocr"
@@ -60,8 +86,20 @@ function writeIndex(items: CacheIndexItem[]) {
 }
 
 function prune(index: CacheIndexItem[]): CacheIndexItem[] {
+  sweepLegacyKeys();
   const now = Date.now();
-  const fresh = index.filter((item) => now - item.savedAt < TTL_MS);
+  const fresh: CacheIndexItem[] = [];
+  for (const item of index) {
+    if (sameLocalDay(item.savedAt, now)) {
+      fresh.push(item);
+      continue;
+    }
+    try {
+      localStorage.removeItem(item.key);
+    } catch {
+      /* ignore */
+    }
+  }
   while (fresh.length > MAX_ENTRIES) {
     const oldest = fresh.pop();
     if (!oldest) break;
@@ -88,12 +126,13 @@ export async function getAnalysisCache<T>(
 ): Promise<T | null> {
   if (typeof window === "undefined") return null;
   try {
+    sweepLegacyKeys();
     const key = await analysisCacheKey(kind, material);
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
     if (!isRecord(parsed) || parsed.v !== 1 || parsed.kind !== kind) return null;
-    if (typeof parsed.savedAt !== "number" || Date.now() - parsed.savedAt > TTL_MS) {
+    if (typeof parsed.savedAt !== "number" || !sameLocalDay(parsed.savedAt, Date.now())) {
       localStorage.removeItem(key);
       return null;
     }
@@ -144,7 +183,10 @@ export function clearAnalysisCache(): number {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith(PREFIX)) toRemove.push(key);
+      if (!key) continue;
+      if (key.startsWith(PREFIX) || LEGACY_PREFIXES.some((prefix) => key.startsWith(prefix))) {
+        toRemove.push(key);
+      }
     }
     for (const key of toRemove) {
       localStorage.removeItem(key);
@@ -152,5 +194,5 @@ export function clearAnalysisCache(): number {
   } catch {
     return 0;
   }
-  return toRemove.filter((key) => key !== INDEX_KEY).length;
+  return toRemove.filter((key) => key !== INDEX_KEY && !LEGACY_PREFIXES.some((prefix) => key === `${prefix}index`)).length;
 }
