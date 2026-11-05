@@ -67,7 +67,21 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
             description:
               "Full Japanese question text; kanji should use 漢字《ひらがな》 markup for furigana hover",
           },
-          correctAnswer: { type: Type.STRING, description: "Correct option number or label" },
+          correctAnswer: {
+            type: Type.STRING,
+            description:
+              "Correct option number/label; for ★ arrangement, the number under the star only",
+          },
+          correct_order: {
+            type: Type.STRING,
+            description:
+              '★ / 文の組み立て only: full correct order as hyphenated numbers, e.g. "2-4-1-3". Empty for normal MCQ',
+          },
+          assembled_sentence: {
+            type: Type.STRING,
+            description:
+              "★ / 文の組み立て only: full Japanese sentence after arranging fragments (漢字《ひらがな》). Empty for normal MCQ",
+          },
           grammarPattern: {
             type: Type.STRING,
             description: "Target grammar with reading, e.g. ～ことだ《ことだ》",
@@ -134,6 +148,8 @@ export const GRAMMAR_RESPONSE_SCHEMA: Schema = {
           "questionNumber",
           "questionText",
           "correctAnswer",
+          "correct_order",
+          "assembled_sentence",
           "grammarPattern",
           "grammar_meaning_burmese",
           "options_table",
@@ -508,6 +524,8 @@ function richerGrammarQuestion(a: GrammarQuestion, b: GrammarQuestion): GrammarQ
     (q.explanation_burmese ? 3 : 0) +
     (q.related_grammar_burmese ? 2 : 0) +
     (q.grammar_meaning_burmese ? 1 : 0) +
+    (q.correct_order ? 2 : 0) +
+    (q.assembled_sentence ? 2 : 0) +
     (q.questionText ? 1 : 0);
   return score(b) > score(a) ? b : a;
 }
@@ -687,6 +705,22 @@ function tidyQuestion(value: unknown): GrammarQuestion | null {
   const questionNumber = asString(value.questionNumber ?? value.question_number ?? value.number);
   const questionText = asString(value.questionText ?? value.question_text ?? value.sentence ?? value.text);
   const correctAnswer = asString(value.correctAnswer ?? value.correct_answer ?? value.answer);
+  const correct_order = normalizeCorrectOrder(
+    asString(
+      value.correct_order ??
+        value.correctOrder ??
+        value.answer_order ??
+        value.answerOrder ??
+        value.arrangement,
+    ),
+  );
+  const assembled_sentence = asString(
+    value.assembled_sentence ??
+      value.assembledSentence ??
+      value.full_sentence ??
+      value.fullSentence ??
+      value.ordered_sentence,
+  );
   const grammarPattern = asString(value.grammarPattern ?? value.grammar_pattern ?? value.pattern);
   const explanation_burmese = stripForeignGlosses(
     asString(
@@ -749,12 +783,32 @@ function tidyQuestion(value: unknown): GrammarQuestion | null {
     questionNumber,
     questionText,
     correctAnswer,
+    correct_order,
+    assembled_sentence,
     grammarPattern,
     grammar_meaning_burmese,
     options_table,
     explanation_burmese,
     related_grammar_burmese,
   };
+}
+
+/** Normalize "2 → 4 → 1 → 3" / "2 4 1 3" / "2413" into "2-4-1-3". */
+export function normalizeCorrectOrder(raw: string): string {
+  const text = raw.trim();
+  if (!text) return "";
+  const parts = text
+    .split(/[-–—>~→,\s|/]+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 2 && parts.every((part) => /^[1-4ア-エ]$/u.test(part))) {
+    return parts.join("-");
+  }
+  // Compact digits only: "2413"
+  if (/^[1-4]{3,4}$/u.test(text)) {
+    return text.split("").join("-");
+  }
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function tidyOptions(value: unknown): GrammarOptionRow[] {

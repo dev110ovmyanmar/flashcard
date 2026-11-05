@@ -35,7 +35,22 @@ export type GrammarQuestion = {
    * lines; UI prefers `options_table` when present.
    */
   questionText: string;
+  /**
+   * Correct choice label for multiple-choice, OR the option number that sits under ★
+   * in 文の組み立て (star) problems.
+   */
   correctAnswer: string;
+  /**
+   * Full correct arrangement for ★ / 文の組み立て only.
+   * Hyphen-separated option numbers in reading order, e.g. "2-4-1-3".
+   * Empty for ordinary 4-choice grammar questions.
+   */
+  correct_order: string;
+  /**
+   * Full Japanese sentence after arranging the ★ fragments (漢字《ひらがな》).
+   * Empty when not a star / arrangement question.
+   */
+  assembled_sentence: string;
   /** Target grammar pattern with reading markup, e.g. ～にもかかわらず《にもかかわらず》. */
   grammarPattern: string;
   /**
@@ -101,20 +116,29 @@ ${LANGUAGE_LOCK_JA}
 
 # 各設問で抽出する内容
 1. questionNumber: 設問番号（文字列。例: "1", "12", "★1"）
-2. questionText: 設問の日本語文（空欄は_____等を保持）。選択肢は改行して「1. 語」「2. 語」のように番号の後に点とスペースを付ける。漢字には《ひらがな》を付ける
-3. correctAnswer: 正解の選択肢（例: "2", "ア"）。不明なら ""
-4. grammarPattern: 問われている文法パターン。必ず読みを付ける（例: ～ことだ《ことだ》、～げ《げ》、～くせに《くせに》）。不明なら ""
-5. grammar_meaning_burmese: UIヘッダー Line 2。grammarPattern の絶対コアなビルマ語訳のみ（下記の厳守ルール）
-6. options_table: 各選択肢（通常1〜4）とターゲット文法を語彙アナライザーと同型のリッチ分解で返す
+2. questionText: 設問の日本語文（空欄は_____等を保持）。選択肢は改行して「1. 語」「2. 語」のように番号の後に点とスペースを付ける。漢字には《ひらがな》を付ける。★文の組み立ては枠内の語を 1〜4 として残す
+3. correctAnswer: 通常の選択問題は正解の選択肢番号（例: "2"）。★／文の組み立ては ★の位置に来る番号（例: "3"）。不明なら ""
+4. correct_order: ★／文の組み立てのみ必須。正しい並びを番号で "2-4-1-3" のようにハイフン区切り（読順・左から右／上から下）。通常の4択文法は ""
+5. assembled_sentence: ★／文の組み立てのみ。並べ替えた完成文（漢字《ひらがな》）。通常の4択は ""
+6. grammarPattern: 問われている文法パターン。必ず読みを付ける（例: ～ことだ《ことだ》、～げ《げ》、～くせに《くせに》）。不明なら ""
+7. grammar_meaning_burmese: UIヘッダー Line 2。grammarPattern の絶対コアなビルマ語訳のみ（下記の厳守ルール）
+8. options_table: 各選択肢（通常1〜4）とターゲット文法を語彙アナライザーと同型のリッチ分解で返す
    - option: "1"|"2"|"3"|"4" など
-   - japanese: その選択肢の文法パターン／表現（読みが必要なら 語《よみ》）
+   - japanese: その選択肢の文法パターン／表現（読みが必要なら 語《よみ》）。★問題では並べ替え用の断片テキスト
    - reading: ひらがな読み（不要なら ""）
    - meaning_burmese: その選択肢のコアなビルマ語訳のみ（N2学習ノート風・1〜4語。詳細説明禁止）
    - usage_burmese: いつ・どこで・どう使うか（口調・話し手の意図・場面）。ビルマ語。UI: ဘယ်နေရာမှာသုံးသလဲ
    - example_sentence: その文法が自然に使える短い日本語例文（1文）。漢字は《ひらがな》。正解・誤答どちらも必須
    - example_burmese: example_sentence の自然なビルマ語訳（1文）
-7. explanation_burmese: 設問文の意味を踏まえ、なぜ正解（正解）が空欄にぴったり合うかを自然なビルマ語で説明。文中の日本語は 語《よみ》形式
-8. related_grammar_burmese: 試験の4選択肢の外にある、意味が近い混同しやすい文法との比較のみ（下記の厳守ルール）。UI: ရောတတ်သည့် Grammar များကို ရှင်းပြချက်
+9. explanation_burmese: 設問文の意味を踏まえ、なぜ正解が合うか／★問題ならなぜその並びになるかを自然なビルマ語で説明。文中の日本語は 語《よみ》形式
+10. related_grammar_burmese: 試験の4選択肢の外にある、意味が近い混同しやすい文法との比較のみ（下記の厳守ルール）。UI: ရောတတ်သည့် Grammar များကို ရှင်းပြချက်
+
+# ★／文の組み立て（厳守）
+- 並べ替え断片は options_table に option "1"〜"4" として入れる（japanese = 枠内の語）
+- correct_order は必ず4つの番号を正しい順に（例: "1-3-2-4"）。重複・欠番禁止
+- correctAnswer は ★の枠に入る番号のみ（並び全体ではない）
+- assembled_sentence は完成した自然な一文
+- 通常の空欄選択（★なし）では correct_order と assembled_sentence は必ず ""
 
 # フィールド分離（厳守）
 - Options Evaluation（options_table / explanation_burmese）:
@@ -192,7 +216,7 @@ ${LANGUAGE_LOCK_JA}
 # 出力形式（厳守）
 - 有効なJSONのみ。Markdown・コードフェンス・前後説明禁止
 - ルート: { "questions": [ ... ] }
-- 設問キーのみ: questionNumber, questionText, correctAnswer, grammarPattern, grammar_meaning_burmese, options_table, explanation_burmese, related_grammar_burmese
+- 設問キーのみ: questionNumber, questionText, correctAnswer, correct_order, assembled_sentence, grammarPattern, grammar_meaning_burmese, options_table, explanation_burmese, related_grammar_burmese
 - options_table キーのみ: option, japanese, reading, meaning_burmese, usage_burmese, example_sentence, example_burmese
 - nuance_burmese / nuance フィールドは禁止（出力しない）
 - 設問は番号順
@@ -204,6 +228,8 @@ ${LANGUAGE_LOCK_JA}
       "questionNumber": "1",
       "questionText": "健康《けんこう》を保《たも》つためには、早《はや》寝早《ねはや》起《お》きの_____。\\n1. ことだ\\n2. わけだ\\n3. はずだ\\n4. ものだ",
       "correctAnswer": "1",
+      "correct_order": "",
+      "assembled_sentence": "",
       "grammarPattern": "～ことだ《ことだ》",
       "grammar_meaning_burmese": "သင့်သည် / လိုက်ပါ",
       "options_table": [

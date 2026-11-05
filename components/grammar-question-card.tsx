@@ -24,10 +24,26 @@ function isCorrectOption(option: string, correct: string): boolean {
   return option.trim() !== "" && option.trim() === correct.trim();
 }
 
+function isStarQuestion(question: GrammarQuestion): boolean {
+  return (
+    question.questionNumber.includes("★") ||
+    question.questionText.includes("★") ||
+    question.correct_order.trim().length > 0
+  );
+}
+
+function parseOrderLabels(order: string): string[] {
+  return order
+    .split(/[-–—>~→,\s|/]+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 function buildGrammarReadings(question: GrammarQuestion): Record<string, string> {
   const map: Record<string, string> = {};
   harvestMarkupReadings(question.questionText, map);
   harvestMarkupReadings(question.grammarPattern, map);
+  harvestMarkupReadings(question.assembled_sentence, map);
   harvestMarkupReadings(question.explanation_burmese, map);
   harvestMarkupReadings(question.related_grammar_burmese, map);
 
@@ -353,6 +369,93 @@ function OptionCard({
   );
 }
 
+function CorrectOrderPanel({
+  order,
+  starAnswer,
+  assembledSentence,
+  options,
+  readings,
+}: {
+  order: string;
+  starAnswer: string;
+  assembledSentence: string;
+  options: GrammarOptionRow[];
+  readings: Record<string, string>;
+}) {
+  const labels = parseOrderLabels(order);
+  if (labels.length === 0 && !assembledSentence) return null;
+
+  const byOption = new Map(options.map((row) => [row.option.trim(), row]));
+
+  return (
+    <div
+      className={[
+        "rounded-xl border border-emerald-300/60 bg-emerald-50/90",
+        "px-3.5 py-3.5 sm:px-4 sm:py-4",
+        "dark:border-emerald-400/25 dark:bg-emerald-500/[0.10]",
+      ].join(" ")}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <SectionLabel tone="sky">{UI.card.correctOrder}</SectionLabel>
+        {starAnswer ? (
+          <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300/70 bg-background/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+            {UI.card.starAnswer} {starAnswer}
+          </span>
+        ) : null}
+      </div>
+
+      {labels.length > 0 ? (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {labels.map((label, index) => {
+            const row = byOption.get(label);
+            const underStar = starAnswer.trim() !== "" && label === starAnswer.trim();
+            return (
+              <div key={`${label}-${index}`} className="flex items-center gap-1.5 sm:gap-2">
+                {index > 0 ? (
+                  <span className="text-emerald-700/55 dark:text-emerald-200/45" aria-hidden>
+                    →
+                  </span>
+                ) : null}
+                <div
+                  className={[
+                    "min-w-0 max-w-[min(100%,11rem)] rounded-lg border px-2 py-1.5 sm:max-w-[14rem] sm:px-2.5",
+                    underStar
+                      ? "border-emerald-500/70 bg-emerald-100/90 shadow-xs dark:border-emerald-300/50 dark:bg-emerald-500/20"
+                      : "border-emerald-300/50 bg-background/85 dark:border-emerald-400/20 dark:bg-background/40",
+                  ].join(" ")}
+                >
+                  <p className="text-[10px] font-semibold tracking-wide text-emerald-800/80 dark:text-emerald-200/85">
+                    {underStar ? `★ ${label}` : label}
+                  </p>
+                  {row?.japanese ? (
+                    <FuriganaHover
+                      text={row.japanese}
+                      reading={row.reading}
+                      readings={readings}
+                      className="mt-0.5 block font-serif text-[13px] leading-5 tracking-tight break-words [overflow-wrap:anywhere] text-emerald-950 dark:text-emerald-50"
+                    />
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {assembledSentence ? (
+        <div className="mt-3.5 border-t border-emerald-300/40 pt-3 dark:border-emerald-400/20">
+          <SectionLabel>{UI.card.assembled}</SectionLabel>
+          <FuriganaHover
+            text={assembledSentence}
+            readings={readings}
+            className="mt-1.5 block font-serif text-[15px] leading-7 tracking-tight break-words [overflow-wrap:anywhere] text-emerald-950 dark:text-emerald-50"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function GrammarQuestionCard({ question }: { question: GrammarQuestion }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const panelId = useId();
@@ -362,12 +465,32 @@ export function GrammarQuestionCard({ question }: { question: GrammarQuestion })
     const parts = splitGrammarQuestionText(question.questionText || "");
     return parts.stem || question.questionText || "—";
   }, [question.questionText]);
+  const star = isStarQuestion(question);
+  const orderLabels = useMemo(
+    () => parseOrderLabels(question.correct_order || ""),
+    [question.correct_order],
+  );
 
   const orderedOptions = useMemo(() => {
+    if (star && orderLabels.length > 0) {
+      const byOption = new Map(options.map((row) => [row.option.trim(), row]));
+      const sequenced: GrammarOptionRow[] = [];
+      const seen = new Set<string>();
+      for (const label of orderLabels) {
+        const row = byOption.get(label);
+        if (!row || seen.has(label)) continue;
+        sequenced.push(row);
+        seen.add(label);
+      }
+      for (const row of options) {
+        if (!seen.has(row.option.trim())) sequenced.push(row);
+      }
+      return sequenced;
+    }
     const correct = options.filter((row) => isCorrectOption(row.option, question.correctAnswer));
     const rest = options.filter((row) => !isCorrectOption(row.option, question.correctAnswer));
     return [...correct, ...rest];
-  }, [options, question.correctAnswer]);
+  }, [options, question.correctAnswer, star, orderLabels]);
 
   const hasDetails = Boolean(question.explanation_burmese || question.related_grammar_burmese);
 
@@ -388,7 +511,7 @@ export function GrammarQuestionCard({ question }: { question: GrammarQuestion })
               className="ml-auto rounded-md border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
             >
               <Check className="size-3 text-emerald-600 dark:text-emerald-300" aria-hidden />
-              {UI.card.correct} {question.correctAnswer}
+              {star ? `${UI.card.starAnswer} ${question.correctAnswer}` : `${UI.card.correct} ${question.correctAnswer}`}
             </Badge>
           ) : null}
         </div>
@@ -424,13 +547,23 @@ export function GrammarQuestionCard({ question }: { question: GrammarQuestion })
 
       {/* Options */}
       <div className="min-w-0 space-y-3 p-3.5 sm:p-4">
+        {star && (question.correct_order || question.assembled_sentence) ? (
+          <CorrectOrderPanel
+            order={question.correct_order}
+            starAnswer={question.correctAnswer}
+            assembledSentence={question.assembled_sentence}
+            options={options}
+            readings={readings}
+          />
+        ) : null}
+
         {orderedOptions.length > 0 ? (
           <div className="grid min-w-0 gap-2.5">
-            {orderedOptions.map((row) => {
+            {orderedOptions.map((row, index) => {
               const correct = isCorrectOption(row.option, question.correctAnswer);
               return (
                 <OptionCard
-                  key={`${row.option}-${row.japanese}`}
+                  key={`${row.option}-${row.japanese}-${index}`}
                   row={row}
                   correct={correct}
                   readings={readings}

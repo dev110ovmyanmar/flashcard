@@ -64,6 +64,9 @@ export const UI = {
   },
   card: {
     correct: "正解",
+    correctOrder: "Correct order",
+    starAnswer: "★ answer",
+    assembled: "Assembled sentence",
     wrong: "誤答",
     number: "#",
     kanji: "Kanji",

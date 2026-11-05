@@ -8,6 +8,7 @@ import {
   grammarGeminiModelChain,
   grammarGeminiModelName,
   mergeGrammarQuestions,
+  normalizeCorrectOrder,
   normalizeGrammarTextInput,
   questionsFromGrammarGemini,
   recoverPartialGrammarQuestions,
@@ -61,6 +62,8 @@ describe("GRAMMAR_RESPONSE_SCHEMA", () => {
       "questionNumber",
       "questionText",
       "correctAnswer",
+      "correct_order",
+      "assembled_sentence",
       "grammarPattern",
       "grammar_meaning_burmese",
       "options_table",
@@ -100,6 +103,16 @@ describe("stripRelatedGrammarMetaPrefix", () => {
   });
 });
 
+describe("normalizeCorrectOrder", () => {
+  it("normalizes star arrangement orders", () => {
+    assert.equal(normalizeCorrectOrder("2-4-1-3"), "2-4-1-3");
+    assert.equal(normalizeCorrectOrder("2 → 4 → 1 → 3"), "2-4-1-3");
+    assert.equal(normalizeCorrectOrder("2413"), "2-4-1-3");
+    assert.equal(normalizeCorrectOrder("2 4 1 3"), "2-4-1-3");
+    assert.equal(normalizeCorrectOrder(""), "");
+  });
+});
+
 describe("shortGrammarMeaning", () => {
   it("keeps punchy slash-alternate cores", () => {
     assert.equal(shortGrammarMeaning("သင့်သည် / လိုက်ပါ"), "သင့်သည် / လိုက်ပါ");
@@ -117,6 +130,39 @@ describe("shortGrammarMeaning", () => {
 });
 
 describe("questionsFromGrammarGemini", () => {
+  it("parses ★ arrangement correct_order and assembled_sentence", () => {
+    const raw = JSON.stringify({
+      questions: [
+        {
+          questionNumber: "★1",
+          questionText: "彼は＿＿＿★＿＿＿＿＿＿＿＿＿＿。\n1. 行く\n2. ことに\n3. 明日\n4. した",
+          correctAnswer: "2",
+          correct_order: "3 → 2 → 1 → 4",
+          assembled_sentence: "彼《かれ》は明日《あした》行く《いく》ことにした。",
+          grammarPattern: "～ことにする《ことにする》",
+          grammar_meaning_burmese: "ဆုံးဖြတ်သည်",
+          options_table: [
+            {
+              option: "1",
+              japanese: "行く",
+              reading: "いく",
+              meaning_burmese: "သွားသည်",
+              usage_burmese: "ရွေ့လျားမှု။",
+              example_sentence: "学校《がっこう》へ行《い》く。",
+              example_burmese: "ကျောင်းသွားသည်။",
+            },
+          ],
+          explanation_burmese: "『သွားရန် ဆုံးဖြတ်သည်』ဖြစ်သောကြောင့် စီစဉ်မှု ၃-၂-၁-၄။ ★ မှာ ၂။",
+          related_grammar_burmese: "",
+        },
+      ],
+    });
+    const parsed = questionsFromGrammarGemini(raw);
+    assert.equal(parsed.questions[0]?.correct_order, "3-2-1-4");
+    assert.equal(parsed.questions[0]?.correctAnswer, "2");
+    assert.match(parsed.questions[0]?.assembled_sentence ?? "", /明日/);
+  });
+
   it("parses a rich options_table payload with direct AI N2 meanings (no glossary)", () => {
     const raw = JSON.stringify({
       questions: [
