@@ -334,7 +334,8 @@ export function FuriganaHover({
     const withMeanings = attachMeanings(base, meanings);
     return applyHighlightsToSegments(withMeanings, highlights);
   }, [text, reading, tokens, readings, meanings, highlights]);
-  const isSentence = segments.length > 1 || /[。．！？\n]|_____/.test(text);
+  const isSentence =
+    segments.length > 1 || /[。．！？\n]|_____|（[\s\u3000_＿]*）|\([\s\u3000_＿]*\)/.test(text);
 
   return (
     <span

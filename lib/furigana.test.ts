@@ -34,6 +34,31 @@ test("parses 《》 and [] furigana markup", () => {
     { surface: "～" },
     { surface: "にもかかわらず", reading: "にもかかわらず" },
   ]);
+  assert.deepEqual(parseFuriganaMarkup("漢字（かんじ）"), [
+    { surface: "漢字", reading: "かんじ" },
+  ]);
+});
+
+test("keeps exam blank parentheses next to furigana markup", () => {
+  const withBlanks =
+    "健康《けんこう》を保《たも》つためには、早《はや》寝早《ねはや》起《お》きの（　　）。";
+  const parsed = parseFuriganaMarkup(withBlanks);
+  assert.equal(parsed.map((part) => part.surface).join(""), withBlanks.replace(/《[^》]*》/g, ""));
+  assert.match(parsed.map((part) => part.surface).join(""), /（　　）/);
+
+  const resolved = resolveFuriganaSegments({ text: withBlanks });
+  assert.equal(
+    resolved.map((part) => part.surface).join(""),
+    "健康を保つためには、早寝早起きの（　　）。",
+  );
+
+  for (const blank of ["( )", "()", "（　）", "（___）", "(____)"]) {
+    const stem = `忙しい《いそがしい》${blank}、いつも笑顔。`;
+    const display = resolveFuriganaSegments({ text: stem })
+      .map((part) => part.surface)
+      .join("");
+    assert.ok(display.includes(blank), `blank ${blank} should remain in ${display}`);
+  }
 });
 
 test("applies a reading map longest-first", () => {

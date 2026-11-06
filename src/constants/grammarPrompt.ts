@@ -31,8 +31,8 @@ export type GrammarOptionRow = {
 export type GrammarQuestion = {
   questionNumber: string;
   /**
-   * Stem Japanese sentence (blank as _____). Options may also appear as numbered
-   * lines; UI prefers `options_table` when present.
+   * Stem Japanese sentence (keep blanks as _____ or （　　） / ( )). Options may
+   * also appear as numbered lines; UI prefers `options_table` when present.
    */
   questionText: string;
   /**
@@ -116,7 +116,7 @@ ${LANGUAGE_LOCK_JA}
 
 # 各設問で抽出する内容
 1. questionNumber: 設問番号（文字列。例: "1", "12", "★1"）
-2. questionText: 設問の日本語文（空欄は_____等を保持）。選択肢は改行して「1. 語」「2. 語」のように番号の後に点とスペースを付ける。漢字には《ひらがな》を付ける。★文の組み立ては枠内の語を 1〜4 として残す
+2. questionText: 設問の日本語文。空欄は必ず残す（_____ または （　　） / ( )）。正解語で埋めない・消さない。選択肢は改行して「1. 語」「2. 語」のように番号の後に点とスペースを付ける。漢字の読みは必ず《ひらがな》（丸括弧は空欄用なので振り仮名に使わない）。★文の組み立ては枠内の語を 1〜4 として残す
 3. correctAnswer: 通常の選択問題は正解の選択肢番号（例: "2"）。★／文の組み立ては ★の位置に来る番号（例: "3"）。不明なら ""
 4. correct_order: ★／文の組み立てのみ必須。正しい並びを番号で "2-4-1-3" のようにハイフン区切り（読順・左から右／上から下）。通常の4択文法は ""
 5. assembled_sentence: ★／文の組み立てのみ。並べ替えた完成文（漢字《ひらがな》）。通常の4択は ""

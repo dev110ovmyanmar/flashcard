@@ -15,8 +15,21 @@ export type FuriganaSegment = {
 };
 
 /**
+ * Parenthesis contents that are exam blanks — not furigana readings.
+ * JLPT stems often use （　　） / ( ) / （___） next to kana; those must stay visible.
+ */
+export function isBlankParenContent(raw: string): boolean {
+  const text = raw.trim();
+  if (!text) return true;
+  return /^[\s\u3000_＿・･…‥.．\-－—─―]+$/u.test(text);
+}
+
+/**
  * Parse inline furigana markup into segments.
  * Supports: 漢字《かんじ》, 漢字（かんじ）, 漢字(かんじ), 漢字[かんじ]
+ *
+ * Parentheses that look like fill-in blanks (empty / spaces / underscores)
+ * are kept as literal text so grammar stems do not lose （　　） / ( ).
  */
 export function parseFuriganaMarkup(text: string): FuriganaSegment[] {
   const source = text;
@@ -25,18 +38,30 @@ export function parseFuriganaMarkup(text: string): FuriganaSegment[] {
   // Prefer a kanji run before brackets (事故《じこ》), else a kana run
   // for grammar patterns (にかかわらず《にかかわらず》).
   const pattern =
-    /(?:([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff々〆ヵヶ]+)|([ぁ-んァ-ヶー]+))(?:《([^》]+)》|（([^）]+)）|\(([^)]+)\)|\[([^\]]+)\])/g;
+    /(?:([\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff々〆ヵヶ]+)|([ぁ-んァ-ヶー]+))(?:《([^》]*)》|（([^）]*)）|\(([^)]*)\)|\[([^\]]*)\])/g;
 
   const segments: FuriganaSegment[] = [];
   let cursor = 0;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(source)) !== null) {
+    const surface = match[1] ?? match[2] ?? "";
+    const fromLens = match[3];
+    const fromFullParen = match[4];
+    const fromHalfParen = match[5];
+    const fromSquare = match[6];
+    const readingRaw = fromLens ?? fromFullParen ?? fromHalfParen ?? fromSquare ?? "";
+    const usedParen = fromFullParen != null || fromHalfParen != null;
+
+    // Blank （　　） / ( ) after kana must not be swallowed as empty furigana.
+    if (usedParen && isBlankParenContent(readingRaw)) {
+      continue;
+    }
+
     if (match.index > cursor) {
       segments.push({ surface: source.slice(cursor, match.index) });
     }
-    const surface = match[1] ?? match[2] ?? "";
-    const reading = (match[3] ?? match[4] ?? match[5] ?? match[6] ?? "").trim();
+    const reading = readingRaw.trim();
     if (surface) segments.push({ surface, reading: reading || undefined });
     cursor = match.index + match[0].length;
   }
